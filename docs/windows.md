@@ -37,6 +37,7 @@
 ## Use the app
 
 - Click the CodexBar icon near the Windows clock to open or hide the app. If you cannot see it, check the hidden-icons arrow.
+- Click the pin at the bottom left of the overview to keep the popup on top at 80% opacity. Drag unused footer or header space to move it; clicking outside or pressing Escape on the overview will not hide it. The tray icon brings a pinned popup forward without moving it. Pinning lasts for this app session, including navigation to settings or details. Click the highlighted pin again to restore full opacity and immediately hide the popup.
 - In Settings, choose the providers you want to track and their order. You can also show usage as an amount used or remaining, change how often the app refreshes, and turn on **Run at startup**.
 - Use search to find a provider. Providers you are not tracking appear alphabetically; when you uncheck one, it moves to the top so you can find it again easily.
 - Click a provider to see its usage, balance, quota reset times, and sign-in method. The details available vary by provider.

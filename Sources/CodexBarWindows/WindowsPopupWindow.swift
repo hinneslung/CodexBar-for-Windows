@@ -48,6 +48,7 @@ final class WindowsPopupWindow {
     private static let settingsIconGlyph = "\u{E713}"
     private static let copyIconGlyph = "\u{E8C8}"
     private static let deleteIconGlyph = "\u{E74D}"
+    private static let pinIconGlyph = "\u{E718}"
     private static let codexHomeHint =
         "Leave blank to use the default Codex sign-in. Example: ~/.codex-personal"
 
@@ -60,6 +61,7 @@ final class WindowsPopupWindow {
     }
 
     private enum Action {
+        case togglePin
         case refresh
         case settings
         case switcher
@@ -187,6 +189,8 @@ final class WindowsPopupWindow {
             self.hide()
         case .ignoreDuplicateTrayActivation:
             break
+        case .reactivatePinned:
+            self.showPinned()
         case .scheduleDeferredHide, .cancelDeferredHideAndReactivate, .none:
             assertionFailure("Unexpected tray activation action")
         }
@@ -194,6 +198,10 @@ final class WindowsPopupWindow {
 
     func showAnchored() {
         guard self.create(), let window = self.window else { return }
+        if self.activationPolicy.isPinned {
+            self.showPinned()
+            return
+        }
         if self.page == .settings {
             self.ensureSettingsControls()
         }
@@ -246,11 +254,62 @@ final class WindowsPopupWindow {
     }
 
     func hide() {
-        guard let window = self.window else { return }
+        guard !self.activationPolicy.isPinned, let window = self.window else { return }
         self.activationPolicy.popupHidden()
         _ = KillTimer(window, Self.deferredHideTimerID)
         _ = KillTimer(window, Self.postTrayActivationTimerID)
         _ = ShowWindow(window, SW_HIDE)
+    }
+
+    private func showPinned() {
+        guard let window = self.window else { return }
+        self.cancelActivationTimers()
+        _ = SetWindowPos(
+            window,
+            HWND(bitPattern: -1),
+            0, 0, 0, 0,
+            UINT(SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW))
+        _ = SetForegroundWindow(window)
+        _ = SetActiveWindow(window)
+    }
+
+    private func togglePin() {
+        guard self.page == .overview, let window = self.window else { return }
+        let pinned = !self.activationPolicy.isPinned
+        guard self.applyPinnedAppearance(pinned, window: window) else { return }
+        self.activationPolicy.setPinned(pinned)
+        self.cancelActivationTimers()
+        if pinned {
+            _ = InvalidateRect(window, nil, false)
+        } else {
+            self.hide()
+        }
+    }
+
+    private func applyPinnedAppearance(_ pinned: Bool, window: HWND) -> Bool {
+        let oldStyle = GetWindowLongPtrW(window, GWL_EXSTYLE)
+        let layered = LONG_PTR(WS_EX_LAYERED)
+        let normalAlpha = WindowsPopupActivationPolicy.normalOpacityAlpha
+        let pinnedAlpha = WindowsPopupActivationPolicy.pinnedOpacityAlpha
+        if !pinned, !SetLayeredWindowAttributes(window, 0, normalAlpha, DWORD(LWA_ALPHA)) { return false }
+        SetLastError(0)
+        let previous = SetWindowLongPtrW(window, GWL_EXSTYLE, pinned ? oldStyle | layered : oldStyle & ~layered)
+        if previous == 0, GetLastError() != 0 {
+            if !pinned { _ = SetLayeredWindowAttributes(window, 0, pinnedAlpha, DWORD(LWA_ALPHA)) }
+            return false
+        }
+        if pinned, !SetLayeredWindowAttributes(window, 0, pinnedAlpha, DWORD(LWA_ALPHA)) {
+            _ = SetWindowLongPtrW(window, GWL_EXSTYLE, oldStyle)
+            return false
+        }
+        _ = RedrawWindow(window, nil, nil, UINT(RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN))
+        return true
+    }
+
+    private func cancelActivationTimers() {
+        guard let window = self.window else { return }
+        _ = KillTimer(window, Self.deferredHideTimerID)
+        _ = KillTimer(window, Self.postTrayActivationTimerID)
     }
 
     func destroy() {
@@ -260,6 +319,7 @@ final class WindowsPopupWindow {
             _ = DestroyWindow(window)
         }
         self.window = nil
+        self.activationPolicy = WindowsPopupActivationPolicy()
         self.releaseFonts()
         if let backgroundBrush = self.backgroundBrush { _ = DeleteObject(backgroundBrush) }
         self.backgroundBrush = nil
@@ -358,6 +418,15 @@ final class WindowsPopupWindow {
             return 0
         case UINT(WM_ERASEBKGND):
             return 1
+        case UINT(WM_NCHITTEST):
+            if self.isPinnedDragPoint(lParam: lParam) { return LRESULT(HTCAPTION) }
+            return DefWindowProcW(window, message, wParam, lParam)
+        case UINT(WM_NCLBUTTONDBLCLK):
+            if self.activationPolicy.isPinned, wParam == WPARAM(HTCAPTION) { return 0 }
+            return DefWindowProcW(window, message, wParam, lParam)
+        case UINT(WM_EXITSIZEMOVE), UINT(WM_DISPLAYCHANGE):
+            if self.activationPolicy.isPinned { self.resizeForCurrentPage() }
+            return 0
         case UINT(WM_LBUTTONUP):
             self.activate(at: Self.point(from: lParam))
             return 0
@@ -499,7 +568,7 @@ final class WindowsPopupWindow {
                     self.hide()
                 case .cancelDeferredHideAndReactivate:
                     self.completePostTrayActivation()
-                case .showFromTray, .ignoreDuplicateTrayActivation, .scheduleDeferredHide, .none:
+                case .showFromTray, .ignoreDuplicateTrayActivation, .scheduleDeferredHide, .reactivatePinned, .none:
                     break
                 }
             } else if UINT_PTR(wParam) == Self.postTrayActivationTimerID {
@@ -545,11 +614,24 @@ final class WindowsPopupWindow {
     }
 
     private func completePostTrayActivation() {
-        guard let window = self.window, self.isVisible else { return }
+        guard !self.activationPolicy.isPinned, let window = self.window, self.isVisible else { return }
         _ = KillTimer(window, Self.deferredHideTimerID)
         _ = KillTimer(window, Self.postTrayActivationTimerID)
         _ = SetForegroundWindow(window)
         _ = SetActiveWindow(window)
+    }
+
+    private func isPinnedDragPoint(lParam: LPARAM) -> Bool {
+        guard self.activationPolicy.isPinned, let window = self.window else { return false }
+        // Hit targets must reflect the latest page and size before testing blank chrome.
+        _ = UpdateWindow(window)
+        var point = Self.point(from: lParam)
+        var client = RECT()
+        guard ScreenToClient(window, &point), GetClientRect(window, &client), Self.contains(client, point: point)
+        else { return false }
+        let isChrome = point.y < self.currentHeaderHeight
+            || point.y >= client.bottom - self.scaled(Metrics.footerHeight)
+        return isChrome && !self.hitTargets.contains(where: { Self.contains($0.rect, point: point) })
     }
 
     private func paint() {
@@ -2488,6 +2570,33 @@ final class WindowsPopupWindow {
                 HitTarget(
                     rect: RECT(left: inset, top: top, right: inset + self.scaled(92), bottom: client.bottom),
                     action: backAction))
+        } else if self.page == .overview {
+            let pinRect = RECT(
+                left: self.scaled(8),
+                top: top,
+                right: self.scaled(42),
+                bottom: client.bottom)
+            if self.activationPolicy.isPinned {
+                WindowsDashboardDrawing.roundedRect(
+                    dc: dc,
+                    rect: RECT(
+                        left: pinRect.left,
+                        top: top + self.scaled(5),
+                        right: pinRect.right,
+                        bottom: client.bottom - self.scaled(5)),
+                    radius: self.scaled(6),
+                    fill: WindowsDashboardPalette.sageSurface,
+                    border: WindowsDashboardPalette.sage)
+            }
+            WindowsDashboardDrawing.text(
+                Self.pinIconGlyph,
+                dc: dc,
+                rect: pinRect,
+                color: self.activationPolicy.isPinned
+                    ? WindowsDashboardPalette.sageText : WindowsDashboardPalette.secondaryText,
+                font: self.systemIconFont,
+                format: UINT(DT_CENTER | DT_VCENTER | DT_SINGLELINE))
+            self.hitTargets.append(HitTarget(rect: pinRect, action: .togglePin))
         }
         if let saveAction {
             let saveRect = RECT(
@@ -2549,7 +2658,7 @@ final class WindowsPopupWindow {
             dc: dc,
             rect: RECT(
                 left: backAction == nil
-                    ? inset
+                    ? self.scaled(48)
                     : (saveAction == nil ? inset + self.scaled(98) : inset + self.scaled(166)),
                 top: top,
                 right: refreshRect.left - self.scaled(4),
@@ -2654,6 +2763,8 @@ final class WindowsPopupWindow {
             return
         }
         switch target.action {
+        case .togglePin:
+            self.togglePin()
         case .refresh:
             WindowsTrayApplication.current?.requestRefresh()
         case .settings:
@@ -2827,7 +2938,7 @@ final class WindowsPopupWindow {
 
     private func resizeForCurrentPage() {
         guard self.isVisible, let window = self.window else { return }
-        let size = self.desiredWindowSize()
+        var size = self.desiredWindowSize()
         var rect = RECT()
         guard GetWindowRect(window, &rect) else { return }
         let monitor = MonitorFromWindow(window, DWORD(MONITOR_DEFAULTTONEAREST))
@@ -2835,10 +2946,15 @@ final class WindowsPopupWindow {
         info.cbSize = DWORD(MemoryLayout<MONITORINFO>.size)
         let workArea = GetMonitorInfoW(monitor, &info) ? info.rcWork : rect
         let gap = self.scaled(8)
-        let x = min(max(workArea.left + gap, rect.left), workArea.right - size.cx - gap)
-        let y = min(
-            max(workArea.top + gap, rect.bottom - size.cy),
-            workArea.bottom - size.cy - gap)
+        if self.activationPolicy.isPinned {
+            size.cx = min(size.cx, max(1, workArea.right - workArea.left - 2 * gap))
+            size.cy = min(size.cy, max(1, workArea.bottom - workArea.top - 2 * gap))
+        }
+        let x = WindowsPopupPlacement.clampedOrigin(
+            preferred: rect.left, extent: size.cx, lower: workArea.left, upper: workArea.right, gap: gap)
+        let y = WindowsPopupPlacement.clampedOrigin(
+            preferred: self.activationPolicy.isPinned ? rect.top : rect.bottom - size.cy,
+            extent: size.cy, lower: workArea.top, upper: workArea.bottom, gap: gap)
         _ = SetWindowPos(
             window,
             nil,
@@ -2848,6 +2964,7 @@ final class WindowsPopupWindow {
             size.cy,
             UINT(SWP_NOZORDER | SWP_NOACTIVATE))
         self.layoutConfigurationControls()
+        _ = InvalidateRect(window, nil, false)
     }
 
     private func desiredWindowSize() -> SIZE {
@@ -2985,6 +3102,7 @@ final class WindowsPopupWindow {
             rect.right - rect.left,
             rect.bottom - rect.top,
             UINT(SWP_NOZORDER | SWP_NOACTIVATE))
+        if self.activationPolicy.isPinned { self.resizeForCurrentPage() }
         self.layoutConfigurationControls()
         _ = InvalidateRect(window, nil, false)
     }
