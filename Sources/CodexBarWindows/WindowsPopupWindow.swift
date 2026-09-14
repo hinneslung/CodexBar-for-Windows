@@ -267,7 +267,10 @@ final class WindowsPopupWindow {
         _ = SetWindowPos(
             window,
             HWND(bitPattern: -1),
-            0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
             UINT(SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW))
         _ = SetForegroundWindow(window)
         _ = SetActiveWindow(window)
@@ -2954,7 +2957,10 @@ final class WindowsPopupWindow {
             preferred: rect.left, extent: size.cx, lower: workArea.left, upper: workArea.right, gap: gap)
         let y = WindowsPopupPlacement.clampedOrigin(
             preferred: self.activationPolicy.isPinned ? rect.top : rect.bottom - size.cy,
-            extent: size.cy, lower: workArea.top, upper: workArea.bottom, gap: gap)
+            extent: size.cy,
+            lower: workArea.top,
+            upper: workArea.bottom,
+            gap: gap)
         _ = SetWindowPos(
             window,
             nil,
