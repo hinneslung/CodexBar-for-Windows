@@ -18,6 +18,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # This Windows fork releases Linux backends, not macOS packages.
+        # macOS compatibility tests remain in ci.yml.
         include:
           - name: linux-x64
             runs-on: ubuntu-24.04
@@ -63,28 +65,6 @@ jobs:
             swift-sdk-triple: aarch64-swift-linux-musl
             swift-sdk-arch: aarch64
             file-arch-pattern: aarch64
-          - name: macos-arm64
-            runs-on: macos-15
-            platform: macos
-            asset-platform: macos
-            asset-arch: arm64
-            build-arch: arm64
-            static-swift-stdlib: false
-            swift-sdk: ""
-            swift-sdk-triple: ""
-            swift-sdk-arch: ""
-            file-arch-pattern: ""
-          - name: macos-x86_64
-            runs-on: macos-15-intel
-            platform: macos
-            asset-platform: macos
-            asset-arch: x86_64
-            build-arch: x86_64
-            static-swift-stdlib: false
-            swift-sdk: ""
-            swift-sdk-triple: ""
-            swift-sdk-arch: ""
-            file-arch-pattern: ""
     runs-on: ${{ matrix.runs-on }}
     env:
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
@@ -97,21 +77,6 @@ jobs:
       SQLITE_AMALGAMATION_SHA3_256: d45c688a8cb23f68611a894a756a12d7eb6ab6e9e2468ca70adbeab3808b5ab9
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - name: Select Xcode 26.3 or 26.2
-        if: matrix.platform == 'macos'
-        run: |
-          set -euo pipefail
-          # Both versions are part of the official macOS 15 runner image.
-          for candidate in /Applications/Xcode_26.3.app /Applications/Xcode_26.2.app; do
-            if [[ -d "$candidate" ]]; then
-              sudo xcode-select -s "${candidate}/Contents/Developer"
-              echo "DEVELOPER_DIR=${candidate}/Contents/Developer" >> "$GITHUB_ENV"
-              break
-            fi
-          done
-          [[ "$(/usr/bin/xcodebuild -version)" == Xcode\ 26.* ]]
-          /usr/bin/xcodebuild -version
 
       - name: Runner info
         run: |
@@ -348,10 +313,7 @@ jobs:
 
           echo "BIN=$BIN"
           file "$BIN"
-          if [[ "${{ matrix.platform }}" == "macos" ]]; then
-            lipo -archs "$BIN" | tr ' ' '\n' | grep -Fx "${{ matrix.asset-arch }}"
-            run_with_timeout "$RUNNER_TEMP/codexbar-cli-smoke-${{ matrix.name }}.txt" "$BIN" config validate --format json
-          elif [[ -n "${{ matrix.swift-sdk }}" ]]; then
+          if [[ -n "${{ matrix.swift-sdk }}" ]]; then
             run_with_timeout "$RUNNER_TEMP/codexbar-cli-help-${{ matrix.name }}.txt" "$BIN" --help
             run_with_timeout "$RUNNER_TEMP/codexbar-cli-config-${{ matrix.name }}.json" "$BIN" config validate --format json
             file "$BIN" | grep -q "${{ matrix.file-arch-pattern }}"
