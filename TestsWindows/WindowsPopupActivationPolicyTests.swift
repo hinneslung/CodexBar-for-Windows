@@ -4,6 +4,70 @@ import Testing
 
 struct WindowsPopupActivationPolicyTests {
     @Test
+    func `pinning cancels the tray handshake and queued hide or activation timers`() {
+        var policy = WindowsPopupActivationPolicy()
+        #expect(policy.trayActivated(isPopupVisible: false) == .showFromTray)
+        policy.setPinned(true)
+        #expect(policy.isPinned)
+        #expect(!policy.isAwaitingPostTrayActivation)
+        #expect(policy.opacityAlpha == 204)
+        #expect(policy.deactivated(automaticallyHides: true) == .none)
+        #expect(policy.deferredHideTimerFired(isPopupVisible: true) == .none)
+        #expect(policy.postTrayActivationTimerFired(isPopupVisible: true) == .none)
+    }
+
+    @Test
+    func `pinned tray activations only reactivate without beginning an anchored show handshake`() {
+        var policy = WindowsPopupActivationPolicy()
+        policy.setPinned(true)
+        #expect(policy.trayActivated(isPopupVisible: true) == .reactivatePinned)
+        #expect(policy.trayActivated(isPopupVisible: true) == .reactivatePinned)
+        #expect(!policy.isAwaitingPostTrayActivation)
+        #expect(policy.isPinned)
+    }
+
+    @Test
+    func `unpin restores opacity and normal tray behavior without stale reactivation`() {
+        var policy = WindowsPopupActivationPolicy()
+        _ = policy.trayActivated(isPopupVisible: false)
+        policy.setPinned(true)
+        policy.setPinned(false)
+        policy.popupHidden()
+        #expect(!policy.isPinned)
+        #expect(policy.opacityAlpha == 255)
+        #expect(policy.postTrayActivationTimerFired(isPopupVisible: false) == .none)
+        #expect(policy.deferredHideTimerFired(isPopupVisible: false) == .none)
+        #expect(policy.trayActivated(isPopupVisible: false) == .showFromTray)
+        #expect(policy.postTrayActivationTimerFired(isPopupVisible: true) == .cancelDeferredHideAndReactivate)
+        #expect(policy.trayActivated(isPopupVisible: true) == .hide)
+    }
+
+    @Test
+    func `pin state is session only and ordinary keep open behavior is unchanged`() {
+        let policy = WindowsPopupActivationPolicy()
+        #expect(!policy.isPinned)
+        #expect(policy.opacityAlpha == 255)
+        #expect(policy.deactivated(automaticallyHides: false) == .none)
+        #expect(policy.deactivated(automaticallyHides: true) == .scheduleDeferredHide)
+    }
+
+    @Test
+    func `pinned placement retains top left through size changes when it fits`() {
+        #expect(WindowsPopupPlacement.clampedOrigin(preferred: 120, extent: 300, lower: 0, upper: 1080, gap: 8) == 120)
+        #expect(WindowsPopupPlacement.clampedOrigin(preferred: 120, extent: 580, lower: 0, upper: 1080, gap: 8) == 120)
+    }
+
+    @Test
+    func `placement clamps on negative monitors and undersized work areas`() {
+        #expect(WindowsPopupPlacement.clampedOrigin(preferred: -1800, extent: 630, lower: -1920, upper: 0, gap: 14)
+            == -1800)
+        #expect(WindowsPopupPlacement.clampedOrigin(preferred: -200, extent: 630, lower: -1920, upper: 0, gap: 14)
+            == -644)
+        #expect(WindowsPopupPlacement.clampedOrigin(preferred: 200, extent: 630, lower: 0, upper: 600, gap: 14) == 0)
+        #expect(WindowsPopupPlacement.clampedOrigin(preferred: 200, extent: 600, lower: 0, upper: 600, gap: 14) == 0)
+    }
+
+    @Test
     func `late inactive notification cannot close a popup just shown from the tray`() {
         var policy = WindowsPopupActivationPolicy()
 
