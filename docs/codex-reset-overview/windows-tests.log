@@ -1,143 +1,124 @@
+warning: 'codexbar': dependency 'sparkle' is not used by any target
+warning: 'codexbar': dependency 'commander' is not used by any target
+warning: 'codexbar': dependency 'swift-crypto' is not used by any target
+warning: 'codexbar': dependency 'keyboardshortcuts' is not used by any target
+warning: 'codexbar': dependency 'vortex' is not used by any target
+warning: 'codexbar': dependency 'sweetcookiekit' is not used by any target
+[0/1] Planning build
 Building for debugging...
-[0/6] Write sources
-[2/6] Write swift-version--3C6C3A12A4DEA587.txt
-[4/10] Emitting module CodexBarWindows
-[5/10] Compiling CodexBarWindows WindowsTrayApplication.swift
-[6/10] Compiling CodexBarWindows WindowsProviderModels.swift
-[7/10] Compiling CodexBarWindows WindowsCanonicalCLIProviderClient.swift
-[8/18] Compiling CodexBarWindows WindowsUnavailableProviderAdapter.swift
-[9/18] Compiling CodexBarWindows WindowsProviderSourceStatus.swift
-[10/18] Compiling CodexBarWindows WindowsProviderDataSource.swift
-[11/18] Compiling CodexBarWindows WindowsProviderDiagnosticDecoder.swift
-[12/18] Compiling CodexBarWindows WindowsMain.swift
-[13/18] Compiling CodexBarWindows WindowsPopupWindow.swift
-[14/18] Compiling CodexBarWindows WindowsProviderSnapshotPublisher.swift
-[15/18] Compiling CodexBarWindows WindowsConfiguredProviderDataSource.swift
-[16/19] Wrapping AST for CodexBarWindows for debugging
-[17/24] Write Objects.LinkFileList
-[18/24] Linking CodexBar.exe
-[20/35] Compiling CodexBarWindowsPortabilityTests WindowsCanonicalCLIProviderClientTests.swift
-[21/35] Emitting module CodexBarWindowsPortabilityTests
-[22/35] Compiling CodexBarWindowsPortabilityTests WindowsConfiguredProviderDataSourceTests.swift
-[23/35] Compiling CodexBarWindowsPortabilityTests WindowsFinalCredentialAlignmentTests.swift
-[24/35] Compiling CodexBarWindowsPortabilityTests WindowsConfiguredProviderLiveTests.swift
-[25/35] Compiling CodexBarWindowsPortabilityTests WindowsNamedProviderProfileTests.swift
-[26/35] Compiling CodexBarWindowsPortabilityTests WindowsProviderSnapshotPublisherTests.swift
-[27/35] Compiling CodexBarWindowsPortabilityTests WindowsProviderDiagnosticDecoderTests.swift
-[28/35] Compiling CodexBarWindowsPortabilityTests WindowsProviderSourcePresentationTests.swift
-[29/35] Compiling CodexBarWindowsPortabilityTests WindowsTrayPresentationTests.swift
-[30/35] Compiling CodexBarWindowsPortabilityTests WindowsProviderSourceStatusTests.swift
-[31/36] C:\Users\hinne\Projects\CodexBar\.build\x86_64-unknown-windows-msvc\debug\CodexBarPackageDiscoveredTests.derived\all-discovered-tests.swift
-[32/37] Write sources
-[34/40] Compiling CodexBarPackageDiscoveredTests CodexBarWindowsPortabilityTests.swift
-[35/40] Emitting module CodexBarPackageDiscoveredTests
-[36/40] Compiling CodexBarPackageDiscoveredTests all-discovered-tests.swift
-[37/39] Write Objects.LinkFileList
-[38/39] Linking CodexBarPackageTests.xctest
-Build complete! (12.94s)
-Test Suite 'All tests' started at 2026-09-21 11:46:46.882
+[0/5] Write sources
+[1/5] Write swift-version--3C6C3A12A4DEA587.txt
+[3/7] Compiling CodexBarWindows WindowsProviderModels.swift
+[4/7] Emitting module CodexBarWindows
+[5/13] Write Objects.LinkFileList
+[6/13] Linking CodexBar.exe
+[8/14] Emitting module CodexBarWindowsPortabilityTests
+[9/11] Write Objects.LinkFileList
+[10/11] Linking CodexBarPackageTests.xctest
+Build complete! (41.00s)
+Test Suite 'All tests' started at 2026-09-21 11:55:29.843
 
-Test Suite 'debug.xctest' started at 2026-09-21 11:46:46.884
+Test Suite 'debug.xctest' started at 2026-09-21 11:55:29.844
 
-Test Suite 'WindowsAppConfigurationTests' started at 2026-09-21 11:46:46.884
+Test Suite 'WindowsAppConfigurationTests' started at 2026-09-21 11:55:29.844
 
-Test Case 'WindowsAppConfigurationTests.testDescriptionsAndDebugOutputNeverExposeConfiguredValues' started at 2026-09-21 11:46:46.884
+Test Case 'WindowsAppConfigurationTests.testDescriptionsAndDebugOutputNeverExposeConfiguredValues' started at 2026-09-21 11:55:29.844
 
 Test Case 'WindowsAppConfigurationTests.testDescriptionsAndDebugOutputNeverExposeConfiguredValues' passed (0.002 seconds)
 
-Test Case 'WindowsAppConfigurationTests.test_catalogMatchesCurrentUpstreamProviderIDsAndNames' started at 2026-09-21 11:46:46.885
+Test Case 'WindowsAppConfigurationTests.test_catalogMatchesCurrentUpstreamProviderIDsAndNames' started at 2026-09-21 11:55:29.846
 
 Test Case 'WindowsAppConfigurationTests.test_catalogMatchesCurrentUpstreamProviderIDsAndNames' passed (0.0 seconds)
 
-Test Case 'WindowsAppConfigurationTests.test_cliNamesMatchCanonicalUpstreamArguments' started at 2026-09-21 11:46:46.886
+Test Case 'WindowsAppConfigurationTests.test_cliNamesMatchCanonicalUpstreamArguments' started at 2026-09-21 11:55:29.847
 
 Test Case 'WindowsAppConfigurationTests.test_cliNamesMatchCanonicalUpstreamArguments' passed (0.0 seconds)
 
-Test Case 'WindowsAppConfigurationTests.test_defaultDisabledProvidersAreAlphabetical' started at 2026-09-21 11:46:46.886
+Test Case 'WindowsAppConfigurationTests.test_defaultDisabledProvidersAreAlphabetical' started at 2026-09-21 11:55:29.847
 
 Test Case 'WindowsAppConfigurationTests.test_defaultDisabledProvidersAreAlphabetical' passed (0.009 seconds)
 
-Test Case 'WindowsAppConfigurationTests.test_defaultsEnableOnlyCodexAndClaude' started at 2026-09-21 11:46:46.895
+Test Case 'WindowsAppConfigurationTests.test_defaultsEnableOnlyCodexAndClaude' started at 2026-09-21 11:55:29.855
 
 Test Case 'WindowsAppConfigurationTests.test_defaultsEnableOnlyCodexAndClaude' passed (0.023 seconds)
 
-Test Case 'WindowsAppConfigurationTests.test_disabledProviderSearchFiltersWithoutMutatingOrder' started at 2026-09-21 11:46:46.918
+Test Case 'WindowsAppConfigurationTests.test_disabledProviderSearchFiltersWithoutMutatingOrder' started at 2026-09-21 11:55:29.878
 
 Test Case 'WindowsAppConfigurationTests.test_disabledProviderSearchFiltersWithoutMutatingOrder' passed (0.011 seconds)
 
-Test Case 'WindowsAppConfigurationTests.test_disabledProviderSearchMatchesNameIDCLINameAndAliases' started at 2026-09-21 11:46:46.929
+Test Case 'WindowsAppConfigurationTests.test_disabledProviderSearchMatchesNameIDCLINameAndAliases' started at 2026-09-21 11:55:29.889
 
 Test Case 'WindowsAppConfigurationTests.test_disabledProviderSearchMatchesNameIDCLINameAndAliases' passed (0.0 seconds)
 
-Test Case 'WindowsAppConfigurationTests.test_disablingProviderMovesItToTopOfDisabledSection' started at 2026-09-21 11:46:46.930
+Test Case 'WindowsAppConfigurationTests.test_disablingProviderMovesItToTopOfDisabledSection' started at 2026-09-21 11:55:29.889
 
 Test Case 'WindowsAppConfigurationTests.test_disablingProviderMovesItToTopOfDisabledSection' passed (0.0 seconds)
 
-Test Case 'WindowsAppConfigurationTests.test_enablingProviderMovesItToBottomOfEnabledSection' started at 2026-09-21 11:46:46.930
+Test Case 'WindowsAppConfigurationTests.test_enablingProviderMovesItToBottomOfEnabledSection' started at 2026-09-21 11:55:29.889
 
 Test Case 'WindowsAppConfigurationTests.test_enablingProviderMovesItToBottomOfEnabledSection' passed (0.0 seconds)
 
-Test Case 'WindowsAppConfigurationTests.test_forwardCompatibleDecodeUsesDefaultsAndPreservesUnknownProviderAndSource' started at 2026-09-21 11:46:46.930
+Test Case 'WindowsAppConfigurationTests.test_forwardCompatibleDecodeUsesDefaultsAndPreservesUnknownProviderAndSource' started at 2026-09-21 11:55:29.890
 
 Test Case 'WindowsAppConfigurationTests.test_forwardCompatibleDecodeUsesDefaultsAndPreservesUnknownProviderAndSource' passed (0.0 seconds)
 
-Test Case 'WindowsAppConfigurationTests.test_mergeAppendsCatalogWithoutDiscardingUnknownProviders' started at 2026-09-21 11:46:46.930
+Test Case 'WindowsAppConfigurationTests.test_mergeAppendsCatalogWithoutDiscardingUnknownProviders' started at 2026-09-21 11:55:29.890
 
 Test Case 'WindowsAppConfigurationTests.test_mergeAppendsCatalogWithoutDiscardingUnknownProviders' passed (0.005 seconds)
 
-Test Case 'WindowsAppConfigurationTests.test_missingFileLoadsDefaultsAndMissingLocalAppDataFails' started at 2026-09-21 11:46:46.935
+Test Case 'WindowsAppConfigurationTests.test_missingFileLoadsDefaultsAndMissingLocalAppDataFails' started at 2026-09-21 11:55:29.894
 
 Test Case 'WindowsAppConfigurationTests.test_missingFileLoadsDefaultsAndMissingLocalAppDataFails' passed (0.016 seconds)
 
-Test Case 'WindowsAppConfigurationTests.test_refreshIntervalParsingAndDecodeStayWithinSupportedRange' started at 2026-09-21 11:46:46.951
+Test Case 'WindowsAppConfigurationTests.test_refreshIntervalParsingAndDecodeStayWithinSupportedRange' started at 2026-09-21 11:55:29.910
 
 Test Case 'WindowsAppConfigurationTests.test_refreshIntervalParsingAndDecodeStayWithinSupportedRange' passed (0.0 seconds)
 
-Test Case 'WindowsAppConfigurationTests.test_schemaSixMigrationPreservesEnabledOrderAndAlphabetizesDisabledProviders' started at 2026-09-21 11:46:46.951
+Test Case 'WindowsAppConfigurationTests.test_schemaSixMigrationPreservesEnabledOrderAndAlphabetizesDisabledProviders' started at 2026-09-21 11:55:29.910
 
 Test Case 'WindowsAppConfigurationTests.test_schemaSixMigrationPreservesEnabledOrderAndAlphabetizesDisabledProviders' passed (0.005 seconds)
 
-Test Case 'WindowsAppConfigurationTests.test_storePersistsOneTimeDisabledOrderingMigration' started at 2026-09-21 11:46:46.956
+Test Case 'WindowsAppConfigurationTests.test_storePersistsOneTimeDisabledOrderingMigration' started at 2026-09-21 11:55:29.915
 
-Test Case 'WindowsAppConfigurationTests.test_storePersistsOneTimeDisabledOrderingMigration' passed (0.018 seconds)
+Test Case 'WindowsAppConfigurationTests.test_storePersistsOneTimeDisabledOrderingMigration' passed (0.021 seconds)
 
-Test Case 'WindowsAppConfigurationTests.test_storeResolvesLocalAppDataAndRoundTripsAtomically' started at 2026-09-21 11:46:46.974
+Test Case 'WindowsAppConfigurationTests.test_storeResolvesLocalAppDataAndRoundTripsAtomically' started at 2026-09-21 11:55:29.936
 
 Test Case 'WindowsAppConfigurationTests.test_storeResolvesLocalAppDataAndRoundTripsAtomically' passed (0.015 seconds)
 
-Test Suite 'WindowsAppConfigurationTests' passed at 2026-09-21 11:46:46.988
+Test Suite 'WindowsAppConfigurationTests' passed at 2026-09-21 11:55:29.950
 
-	 Executed 16 tests, with 0 failures (0 unexpected) in 0.105 (0.105) seconds
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.106 (0.106) seconds
 
-Test Suite 'WindowsStartupTaskTests' started at 2026-09-21 11:46:46.988
+Test Suite 'WindowsStartupTaskTests' started at 2026-09-21 11:55:29.950
 
-Test Case 'WindowsStartupTaskTests.test_enableScriptRegistersCurrentUserTaskWithoutElevatingOrOpeningAConsole' started at 2026-09-21 11:46:46.988
+Test Case 'WindowsStartupTaskTests.test_enableScriptRegistersCurrentUserTaskWithoutElevatingOrOpeningAConsole' started at 2026-09-21 11:55:29.950
 
 Test Case 'WindowsStartupTaskTests.test_enableScriptRegistersCurrentUserTaskWithoutElevatingOrOpeningAConsole' passed (0.0 seconds)
 
-Test Case 'WindowsStartupTaskTests.test_pendingChangeBlocksRepeatedClicksUntilCompletionOrRollback' started at 2026-09-21 11:46:46.989
+Test Case 'WindowsStartupTaskTests.test_pendingChangeBlocksRepeatedClicksUntilCompletionOrRollback' started at 2026-09-21 11:55:29.950
 
 Test Case 'WindowsStartupTaskTests.test_pendingChangeBlocksRepeatedClicksUntilCompletionOrRollback' passed (0.0 seconds)
 
-Test Case 'WindowsStartupTaskTests.test_scriptsEscapePowerShellValuesAndRemoveOnlyCodexBarTask' started at 2026-09-21 11:46:46.989
+Test Case 'WindowsStartupTaskTests.test_scriptsEscapePowerShellValuesAndRemoveOnlyCodexBarTask' started at 2026-09-21 11:55:29.951
 
 Test Case 'WindowsStartupTaskTests.test_scriptsEscapePowerShellValuesAndRemoveOnlyCodexBarTask' passed (0.0 seconds)
 
-Test Case 'WindowsStartupTaskTests.test_statusScriptDetectsMovedApplicationAndTaskPolicyDrift' started at 2026-09-21 11:46:46.989
+Test Case 'WindowsStartupTaskTests.test_statusScriptDetectsMovedApplicationAndTaskPolicyDrift' started at 2026-09-21 11:55:29.951
 
 Test Case 'WindowsStartupTaskTests.test_statusScriptDetectsMovedApplicationAndTaskPolicyDrift' passed (0.0 seconds)
 
-Test Suite 'WindowsStartupTaskTests' passed at 2026-09-21 11:46:46.989
+Test Suite 'WindowsStartupTaskTests' passed at 2026-09-21 11:55:29.951
 
-	 Executed 4 tests, with 0 failures (0 unexpected) in 0.0 (0.0) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
 
-Test Suite 'debug.xctest' passed at 2026-09-21 11:46:46.989
+Test Suite 'debug.xctest' passed at 2026-09-21 11:55:29.951
 
-	 Executed 20 tests, with 0 failures (0 unexpected) in 0.105 (0.105) seconds
+	 Executed 20 tests, with 0 failures (0 unexpected) in 0.106 (0.106) seconds
 
-Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
+Test Suite 'All tests' passed at 2026-09-21 11:55:29.951
 
-	 Executed 20 tests, with 0 failures (0 unexpected) in 0.105 (0.105) seconds
+	 Executed 20 tests, with 0 failures (0 unexpected) in 0.106 (0.106) seconds
 
 ◊ Test run started.
 
@@ -151,7 +132,7 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 √ Test "bundled Windows icon loads native large and small handles" passed after 0.002 seconds.
 
-√ Suite WindowsApplicationIdentityTests passed after 0.002 seconds.
+√ Suite WindowsApplicationIdentityTests passed after 0.003 seconds.
 
 ◊ Suite "Windows browser credential parser" started.
 
@@ -209,11 +190,11 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 ◊ Test "valid release payload is accepted without following links" started.
 
-√ Test "valid release payload is accepted without following links" passed after 0.046 seconds.
+√ Test "valid release payload is accepted without following links" passed after 0.043 seconds.
 
 ◊ Test "unsafe release version cannot become a WSL path" started.
 
-√ Test "unsafe release version cannot become a WSL path" passed after 0.048 seconds.
+√ Test "unsafe release version cannot become a WSL path" passed after 0.042 seconds.
 
 ◊ Test "install plan uses direct fixed commands in an application owned directory" started.
 
@@ -229,31 +210,31 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 ◊ Test "same version payload with a mismatched CLI checksum is never returned" started.
 
-√ Test "same version payload with a mismatched CLI checksum is never returned" passed after 0.051 seconds.
+√ Test "same version payload with a mismatched CLI checksum is never returned" passed after 0.042 seconds.
 
 ◊ Test "same version stale launcher is replaced from the current payload" started.
 
-√ Test "same version stale launcher is replaced from the current payload" passed after 0.048 seconds.
+√ Test "same version stale launcher is replaced from the current payload" passed after 0.043 seconds.
 
 ◊ Test "bundled payload can be provisioned and executed in a live WSL distribution" started.
 
 √ Test "bundled payload can be provisioned and executed in a live WSL distribution" passed after 0.001 seconds.
 
-√ Suite "Windows bundled WSL CLI provisioner" passed after 0.195 seconds.
+√ Suite "Windows bundled WSL CLI provisioner" passed after 0.172 seconds.
 
 ◊ Suite "Windows canonical CLI discovery cache" started.
 
 ◊ Test "concurrent provider refreshes share one WSL discovery probe" started.
 
-√ Test "concurrent provider refreshes share one WSL discovery probe" passed after 0.031 seconds.
+√ Test "concurrent provider refreshes share one WSL discovery probe" passed after 0.039 seconds.
 
-√ Suite "Windows canonical CLI discovery cache" passed after 0.031 seconds.
+√ Suite "Windows canonical CLI discovery cache" passed after 0.039 seconds.
 
 ◊ Suite "Windows canonical CLI provider client" started.
 
 ◊ Test "canonical upstream payload projects arbitrary windows and credits" started.
 
-√ Test "canonical upstream payload projects arbitrary windows and credits" passed after 0.007 seconds.
+√ Test "canonical upstream payload projects arbitrary windows and credits" passed after 0.005 seconds.
 
 ◊ Test "unread credits stay absent through decoder and presentation" started.
 
@@ -313,13 +294,13 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 ◊ Test "decoder keeps only available reset expiries and ignores the server count" started.
 
-√ Test "decoder keeps only available reset expiries and ignores the server count" passed after 0.001 seconds.
+√ Test "decoder keeps only available reset expiries and ignores the server count" passed after 0.002 seconds.
 
 ◊ Test "missing and malformed reset inventory decode as absent without losing usage" started.
 
 √ Test "missing and malformed reset inventory decode as absent without losing usage" passed after 0.002 seconds.
 
-√ Suite "Windows canonical CLI provider client" passed after 0.019 seconds.
+√ Suite "Windows canonical CLI provider client" passed after 0.017 seconds.
 
 ◊ Suite "Windows configured provider data source" started.
 
@@ -349,7 +330,7 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 ◊ Test "automatic diagnose provisions bundled CLI in the ordinary-policy selected distro" started.
 
-√ Test "automatic diagnose provisions bundled CLI in the ordinary-policy selected distro" passed after 0.019 seconds.
+√ Test "automatic diagnose provisions bundled CLI in the ordinary-policy selected distro" passed after 0.020 seconds.
 
 ◊ Test "DeepSeek manual token stays in staged account input and remains authoritative" started.
 
@@ -361,25 +342,25 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 ◊ Test "valid manual early failure is invalidated by replacement during a delayed sibling" started.
 
-√ Test "valid manual early failure is invalidated by replacement during a delayed sibling" passed after 0.031 seconds.
+√ Test "valid manual early failure is invalidated by replacement during a delayed sibling" passed after 0.032 seconds.
 
 ◊ Test "corrupt manual early failure is invalidated by clear during a delayed sibling" started.
 
-√ Test "corrupt manual early failure is invalidated by clear during a delayed sibling" passed after 0.021 seconds.
+√ Test "corrupt manual early failure is invalidated by clear during a delayed sibling" passed after 0.019 seconds.
 
 ◊ Test "stable blob identity lookup failure publishes once and replacement invalidates it" started.
 
-√ Test "stable blob identity lookup failure publishes once and replacement invalidates it" passed after 0.022 seconds.
+√ Test "stable blob identity lookup failure publishes once and replacement invalidates it" passed after 0.025 seconds.
 
 ◊ Test "OpenCode early failure is invalidated by manual save during a delayed sibling" started.
 
-√ Test "OpenCode early failure is invalidated by manual save during a delayed sibling" passed after 0.023 seconds.
+√ Test "OpenCode early failure is invalidated by manual save during a delayed sibling" passed after 0.029 seconds.
 
 ◊ Test "missing CLI result is invalidated when manual intent changes during resolution" started.
 
-√ Test "missing CLI result is invalidated when manual intent changes during resolution" passed after 0.021 seconds.
+√ Test "missing CLI result is invalidated when manual intent changes during resolution" passed after 0.022 seconds.
 
-√ Suite "Windows configured provider data source" passed after 0.170 seconds.
+√ Suite "Windows configured provider data source" passed after 0.181 seconds.
 
 ◊ Suite "Windows configured provider live checks" started.
 
@@ -393,7 +374,7 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 ◊ Test "catalog method counts and aligned provider copy are exact" started.
 
-√ Test "catalog method counts and aligned provider copy are exact" passed after 0.004 seconds.
+√ Test "catalog method counts and aligned provider copy are exact" passed after 0.003 seconds.
 
 ◊ Test "MiniMax accepts only nonempty Coding Plan keys with pinned safe guidance" started.
 
@@ -421,33 +402,33 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 ◊ Test "hidden runner captures output and exit status without a shell" started.
 
-√ Test "hidden runner captures output and exit status without a shell" passed after 0.069 seconds.
+√ Test "hidden runner captures output and exit status without a shell" passed after 0.052 seconds.
 
 ◊ Test "parent closes child output handles so readers observe process EOF" started.
 
-√ Test "parent closes child output handles so readers observe process EOF" passed after 0.053 seconds.
+√ Test "parent closes child output handles so readers observe process EOF" passed after 0.070 seconds.
 
 ◊ Test "stdin writer obeys the process deadline when the child never reads" started.
 
-√ Test "stdin writer obeys the process deadline when the child never reads" passed after 0.126 seconds.
+√ Test "stdin writer obeys the process deadline when the child never reads" passed after 0.115 seconds.
 
 ◊ Test "task cancellation terminates a hidden child promptly" started.
 
-√ Test "task cancellation terminates a hidden child promptly" passed after 0.231 seconds.
+√ Test "task cancellation terminates a hidden child promptly" passed after 0.217 seconds.
 
 ◊ Test "output readers drain before a large stdin write" started.
 
-√ Test "output readers drain before a large stdin write" passed after 0.130 seconds.
+√ Test "output readers drain before a large stdin write" passed after 0.127 seconds.
 
 ◊ Test "hidden runner writes stdin through a closed non-command-line pipe" started.
 
-√ Test "hidden runner writes stdin through a closed non-command-line pipe" passed after 0.024 seconds.
+√ Test "hidden runner writes stdin through a closed non-command-line pipe" passed after 0.016 seconds.
 
 ◊ Test "anonymous stdin pipe inherits only the child read end" started.
 
 √ Test "anonymous stdin pipe inherits only the child read end" passed after 0.001 seconds.
 
-√ Suite "Windows hidden process runner" passed after 0.638 seconds.
+√ Suite "Windows hidden process runner" passed after 0.600 seconds.
 
 ◊ Suite WindowsMeterGeometryTests started.
 
@@ -523,23 +504,23 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 ◊ Test "legacy encrypted record without profile identity loads from original provider file" started.
 
-√ Test "legacy encrypted record without profile identity loads from original provider file" passed after 0.008 seconds.
+√ Test "legacy encrypted record without profile identity loads from original provider file" passed after 0.010 seconds.
 
 ◊ Test "same provider browser sessions save load and clear independently by profile" started.
 
-√ Test "same provider browser sessions save load and clear independently by profile" passed after 0.017 seconds.
+√ Test "same provider browser sessions save load and clear independently by profile" passed after 0.019 seconds.
 
 ◊ Test "same provider credentials save and clear independently by profile" started.
 
-√ Test "same provider credentials save and clear independently by profile" passed after 0.020 seconds.
+√ Test "same provider credentials save and clear independently by profile" passed after 0.019 seconds.
 
 ◊ Test "profile removal skips nonexistent Codex vault schema and clears manual profile only" started.
 
-√ Test "profile removal skips nonexistent Codex vault schema and clears manual profile only" passed after 0.008 seconds.
+√ Test "profile removal skips nonexistent Codex vault schema and clears manual profile only" passed after 0.012 seconds.
 
 ◊ Test "configured datasource keeps concurrent same provider profiles and authority separate" started.
 
-√ Test "configured datasource keeps concurrent same provider profiles and authority separate" passed after 0.045 seconds.
+√ Test "configured datasource keeps concurrent same provider profiles and authority separate" passed after 0.046 seconds.
 
 ◊ Test "presentation distinguishes named profiles while leaving one default familiar" started.
 
@@ -561,7 +542,7 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 √ Test "codex reset counts stay isolated between named profiles" passed after 0.001 seconds.
 
-√ Suite "Windows named provider profiles" passed after 0.115 seconds.
+√ Suite "Windows named provider profiles" passed after 0.122 seconds.
 
 ◊ Suite WindowsPopupActivationPolicyTests started.
 
@@ -623,7 +604,7 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 ◊ Test "every catalog provider maps to a unique atlas cell backed by an upstream logo" started.
 
-√ Test "every catalog provider maps to a unique atlas cell backed by an upstream logo" passed after 0.006 seconds.
+√ Test "every catalog provider maps to a unique atlas cell backed by an upstream logo" passed after 0.005 seconds.
 
 ◊ Test "descriptor aliases reuse their upstream artwork" started.
 
@@ -637,7 +618,7 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 √ Test "bundled atlas loads as a GDI bitmap" passed after 0.001 seconds.
 
-√ Suite WindowsProviderBrandingTests passed after 0.007 seconds.
+√ Suite WindowsProviderBrandingTests passed after 0.006 seconds.
 
 ◊ Suite "Windows provider credential bridge" started.
 
@@ -671,7 +652,7 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 ◊ Test "default loader reads only the selected WSL OpenCode data home" started.
 
-√ Test "default loader reads only the selected WSL OpenCode data home" passed after 0.007 seconds.
+√ Test "default loader reads only the selected WSL OpenCode data home" passed after 0.008 seconds.
 
 ◊ Test "errors never include credential contents" started.
 
@@ -689,7 +670,7 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 √ Test "WSL environment entries are merged by variable name" passed after 0.001 seconds.
 
-√ Suite "Windows provider credential bridge" passed after 0.010 seconds.
+√ Suite "Windows provider credential bridge" passed after 0.011 seconds.
 
 ◊ Suite "Windows provider diagnostic decoder" started.
 
@@ -733,13 +714,13 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 √ Test "diagnostic source modes and successful source must match staged web route" passed after 0.002 seconds.
 
-√ Suite "Windows provider diagnostic decoder" passed after 0.015 seconds.
+√ Suite "Windows provider diagnostic decoder" passed after 0.016 seconds.
 
 ◊ Suite "Windows provider operation lock" started.
 
 ◊ Test "vault mutation waits for an active provider operation" started.
 
-√ Test "vault mutation waits for an active provider operation" passed after 0.189 seconds.
+√ Test "vault mutation waits for an active provider operation" passed after 0.190 seconds.
 
 √ Suite "Windows provider operation lock" passed after 0.190 seconds.
 
@@ -747,13 +728,13 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 ◊ Test "credential mutation during a delayed sibling rejects the stale provider at commit" started.
 
-√ Test "credential mutation during a delayed sibling rejects the stale provider at commit" passed after 0.028 seconds.
+√ Test "credential mutation during a delayed sibling rejects the stale provider at commit" passed after 0.015 seconds.
 
 ◊ Test "publication rejects provider mutex contention without blocking the UI thread" started.
 
 √ Test "publication rejects provider mutex contention without blocking the UI thread" passed after 0.015 seconds.
 
-√ Suite "Windows provider snapshot publication" passed after 0.044 seconds.
+√ Suite "Windows provider snapshot publication" passed after 0.030 seconds.
 
 ◊ Suite "Windows provider source presentation" started.
 
@@ -771,11 +752,11 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 ◊ Test "automatic credential guidance reflects verified provider methods" started.
 
-√ Test "automatic credential guidance reflects verified provider methods" passed after 0.002 seconds.
+√ Test "automatic credential guidance reflects verified provider methods" passed after 0.001 seconds.
 
 ◊ Test "disabled summaries compose verified capabilities in order without duplicates" started.
 
-√ Test "disabled summaries compose verified capabilities in order without duplicates" passed after 0.002 seconds.
+√ Test "disabled summaries compose verified capabilities in order without duplicates" passed after 0.001 seconds.
 
 ◊ Test "manual capability summaries preserve session and browser credential labels" started.
 
@@ -787,7 +768,7 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 ◊ Test "provider sign-in metadata remains tied to reviewed upstream routes" started.
 
-√ Test "provider sign-in metadata remains tied to reviewed upstream routes" passed after 0.005 seconds.
+√ Test "provider sign-in metadata remains tied to reviewed upstream routes" passed after 0.003 seconds.
 
 ◊ Test "unavailable provider metadata is the single configuration gate" started.
 
@@ -795,7 +776,7 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 ◊ Test "canonical source decoding normalizes generic and preserves specific upstream labels" started.
 
-√ Test "canonical source decoding normalizes generic and preserves specific upstream labels" passed after 0.003 seconds.
+√ Test "canonical source decoding normalizes generic and preserves specific upstream labels" passed after 0.004 seconds.
 
 ◊ Test "canonical source decoding recognizes provider and mechanism patterns" started.
 
@@ -833,7 +814,7 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 √ Test "cached reset expiries survive stale success retention and refresh overlay" passed after 0.001 seconds.
 
-√ Suite "Windows provider source presentation" passed after 0.028 seconds.
+√ Suite "Windows provider source presentation" passed after 0.018 seconds.
 
 ◊ Suite WindowsProviderSourceStatusTests started.
 
@@ -955,19 +936,19 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 ◊ Test "DPAPI vault round trips without plaintext persistence" started.
 
-√ Test "DPAPI vault round trips without plaintext persistence" passed after 0.023 seconds.
+√ Test "DPAPI vault round trips without plaintext persistence" passed after 0.019 seconds.
 
 ◊ Test "vault rejects provider swaps and damaged ciphertext" started.
 
-√ Test "vault rejects provider swaps and damaged ciphertext" passed after 0.017 seconds.
+√ Test "vault rejects provider swaps and damaged ciphertext" passed after 0.010 seconds.
 
 ◊ Test "vault rejects oversized and newer schema ciphertext before use" started.
 
-√ Test "vault rejects oversized and newer schema ciphertext before use" passed after 0.016 seconds.
+√ Test "vault rejects oversized and newer schema ciphertext before use" passed after 0.010 seconds.
 
 ◊ Test "failed atomic replacement preserves the previous credential" started.
 
-√ Test "failed atomic replacement preserves the previous credential" passed after 0.019 seconds.
+√ Test "failed atomic replacement preserves the previous credential" passed after 0.020 seconds.
 
 ◊ Test "browser session becomes a minimal web config" started.
 
@@ -983,7 +964,7 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 ◊ Test "configuration client saves and clears only the app vault" started.
 
-√ Test "configuration client saves and clears only the app vault" passed after 0.008 seconds.
+√ Test "configuration client saves and clears only the app vault" passed after 0.009 seconds.
 
 ◊ Test "configuration fails closed without the canonical credential vault" started.
 
@@ -997,19 +978,19 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 √ Test "companion validation mirrors unchanged provider readers" passed after 0.001 seconds.
 
-√ Suite "Windows manual provider configuration" passed after 0.102 seconds.
+√ Suite "Windows manual provider configuration" passed after 0.088 seconds.
 
 ◊ Suite "Windows WSL source discovery" started.
 
 ◊ Test "default user home resolves only the registry selected non-root UID" started.
 
-√ Test "default user home resolves only the registry selected non-root UID" passed after 0.007 seconds.
+√ Test "default user home resolves only the registry selected non-root UID" passed after 0.008 seconds.
 
 ◊ Test "distribution names cannot escape the WSL localhost root" started.
 
 √ Test "distribution names cannot escape the WSL localhost root" passed after 0.001 seconds.
 
-√ Suite "Windows WSL source discovery" passed after 0.007 seconds.
+√ Suite "Windows WSL source discovery" passed after 0.008 seconds.
 
 ◊ Suite "Windows wide strings" started.
 
@@ -1019,4 +1000,4 @@ Test Suite 'All tests' passed at 2026-09-21 11:46:46.989
 
 √ Suite "Windows wide strings" passed after 0.001 seconds.
 
-√ Test run with 190 tests in 25 suites passed after 1.617 seconds.
+√ Test run with 190 tests in 25 suites passed after 1.545 seconds.

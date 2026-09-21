@@ -37,7 +37,7 @@ struct WindowsCodexResetCredits: Equatable, Sendable {
     }
 
     func compactText(now: Date) -> String? {
-        guard self.count > 0 else { return nil }
+        guard !self.availableExpiries.isEmpty else { return nil }
         let countText = self.count == 1 ? "1 reset" : "\(self.count) resets"
         guard let earliestExpiry,
               let expiryText = WindowsResetLabelFormatter.compact(
@@ -49,7 +49,7 @@ struct WindowsCodexResetCredits: Equatable, Sendable {
     }
 
     func accessibilityText(now: Date) -> String? {
-        guard self.count > 0 else { return nil }
+        guard !self.availableExpiries.isEmpty else { return nil }
         let countText =
             self.count == 1
                 ? "1 available usage reset"
@@ -747,7 +747,7 @@ struct WindowsDashboardPresentation: Equatable, Sendable {
         } else {
             nil
         }
-        let visibleCodexResetCredits = codexResetCredits.flatMap { $0.count > 0 ? $0 : nil }
+        let visibleCodexResetCredits = codexResetCredits.flatMap { !$0.availableExpiries.isEmpty ? $0 : nil }
         return WindowsProviderRowPresentation(
             provider: profile.id,
             profileID: profile.profileID,

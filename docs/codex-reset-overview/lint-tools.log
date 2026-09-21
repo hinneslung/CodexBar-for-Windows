@@ -1,0 +1,20 @@
+wsl: Processing /etc/fstab with mount -a failed.
+==> Downloading SwiftLint 0.65.0
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+
+ 40 63.6M   40 25.7M    0     0  30.5M      0  0:00:02 --:--:--  0:00:02 30.5M
+100 63.6M  100 63.6M    0     0  53.2M      0  0:00:01  0:00:01 --:--:--  107M
+==> Installed lint tools to /mnt/c/Users/hinne/Projects/CodexBar/.build/lint-tools/bin
+/mnt/c/Users/hinne/Projects/CodexBar/.build/lint-tools/bin/swiftlint: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.34' not found (required by /mnt/c/Users/hinne/Projects/CodexBar/.build/lint-tools/bin/swiftlint)
+/mnt/c/Users/hinne/Projects/CodexBar/.build/lint-tools/bin/swiftlint: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.38' not found (required by /mnt/c/Users/hinne/Projects/CodexBar/.build/lint-tools/bin/swiftlint)
+/mnt/c/Users/hinne/Projects/CodexBar/.build/lint-tools/bin/swiftlint: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.32' not found (required by /mnt/c/Users/hinne/Projects/CodexBar/.build/lint-tools/bin/swiftlint)
+/mnt/c/Users/hinne/Projects/CodexBar/.build/lint-tools/bin/swiftlint: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.33' not found (required by /mnt/c/Users/hinne/Projects/CodexBar/.build/lint-tools/bin/swiftlint)
+/mnt/c/Users/hinne/Projects/CodexBar/.build/lint-tools/bin/swiftlint: /lib/x86_64-linux-gnu/libstdc++.so.6: version `GLIBCXX_3.4.32' not found (required by /mnt/c/Users/hinne/Projects/CodexBar/.build/lint-tools/bin/swiftlint)
+/mnt/c/Users/hinne/Projects/CodexBar/.build/lint-tools/bin/swiftlint: /lib/x86_64-linux-gnu/libstdc++.so.6: version `GLIBCXX_3.4.30' not found (required by /mnt/c/Users/hinne/Projects/CodexBar/.build/lint-tools/bin/swiftlint)
+/mnt/c/Users/hinne/Projects/CodexBar/.build/lint-tools/bin/swiftlint: /lib/x86_64-linux-gnu/libstdc++.so.6: version `GLIBCXX_3.4.29' not found (required by /mnt/c/Users/hinne/Projects/CodexBar/.build/lint-tools/bin/swiftlint)
+/mnt/c/Users/hinne/Projects/CodexBar/.build/lint-tools/bin/swiftlint: /lib/x86_64-linux-gnu/libm.so.6: version `GLIBC_2.35' not found (required by /mnt/c/Users/hinne/Projects/CodexBar/.build/lint-tools/bin/swiftlint)
+/mnt/c/Users/hinne/Projects/CodexBar/.build/lint-tools/bin/swiftlint: /lib/x86_64-linux-gnu/libm.so.6: version `GLIBC_2.38' not found (required by /mnt/c/Users/hinne/Projects/CodexBar/.build/lint-tools/bin/swiftlint)

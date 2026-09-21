@@ -1,0 +1,7 @@
+CI job: https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35558929650/job/106207914838
+Initial lint failure excerpt (all three sites subsequently changed to isEmpty):
+2026-09-21T03:52:37.3704156Z /home/runner/work/CodexBar-for-Windows/CodexBar-for-Windows/Sources/CodexBarWindows/WindowsProviderModels.swift:40:20: error: Empty Count Violation: Prefer checking `isEmpty` over comparing `count` to zero (empty_count)
+2026-09-21T03:52:37.3733314Z /home/runner/work/CodexBar-for-Windows/CodexBar-for-Windows/Sources/CodexBarWindows/WindowsProviderModels.swift:52:20: error: Empty Count Violation: Prefer checking `isEmpty` over comparing `count` to zero (empty_count)
+2026-09-21T03:52:37.3744972Z /home/runner/work/CodexBar-for-Windows/CodexBar-for-Windows/Sources/CodexBarWindows/WindowsProviderModels.swift:750:71: error: Empty Count Violation: Prefer checking `isEmpty` over comparing `count` to zero (empty_count)
+2026-09-21T03:52:53.3517548Z Done linting! Found 3 violations, 3 serious in 2191 files.
+2026-09-21T03:52:53.6137673Z ##[error]Process completed with exit code 2.

@@ -15,6 +15,12 @@ Environment: Windows x64, Swift 6.3.3, repository at `windows/codex-reset-overvi
 CI will provide clean-checkout lint and native architecture coverage. No live provider,
 browser-cookie, or Keychain probes were used.
 
+Initial CI SwiftLint found three `empty_count` violations; all were changed to
+`!availableExpiries.isEmpty`, and all 190 native tests passed again. The local pinned
+SwiftLint binary could be installed but cannot run in WSL without Linux SourceKit;
+the CI runner supplies that toolchain. See [initial diagnostics](ci-lint-initial.log)
+and [local tool limitation](swiftlint.log).
+
 ## Native smoke
 
 `build-smoke.ps1` compiles the actual Windows sources with `SmokeMain.swift` replacing
@@ -54,4 +60,9 @@ the fixture processes only use synthetic data and temporary settings.
 
 agent-browser opened the repository successfully and captured
 [the repository snapshot](browser-repository-snapshot.log).
-PR, CI, and manual installer-e2e links will be recorded after publication.
+- [PR #9](https://github.com/hinneslung/CodexBar-for-Windows/pull/9): agent-browser
+  verified the page URL/title and captured [its snapshot](browser-pr-snapshot.log)
+  and [screenshot](../screenshots/codex-reset-overview-pr.png).
+- [Initial CI](https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35558929650).
+- [Manual installer-e2e run](https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35558929791),
+  dispatched on the feature branch with a QA artifact version, without release publication.
