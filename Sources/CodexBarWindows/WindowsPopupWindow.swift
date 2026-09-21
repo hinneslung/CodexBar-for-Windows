@@ -757,7 +757,23 @@ final class WindowsPopupWindow {
         let reset = governing?.overviewResetText ?? ""
         let detailTop = rect.top + self.scaled(38)
         let detailBottom = rect.bottom - self.scaled(3)
-        let resetLeft = rect.left + (rect.right - rect.left) * 55 / 100
+        let oldResetLeft = rect.left + (rect.right - rect.left) * 55 / 100
+        var resetLeft = oldResetLeft
+        if !reset.isEmpty,
+           let dc,
+           let secondaryFont = self.secondaryFont,
+           let previousFont = SelectObject(dc, secondaryFont)
+        {
+            defer { _ = SelectObject(dc, previousFont) }
+            var measured = RECT()
+            let result = WindowsWideString.withPointer(reset) { pointer in
+                DrawTextW(dc, pointer, -1, &measured, UINT(DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX))
+            }
+            let measuredWidth = measured.right - measured.left
+            if result > 0, measuredWidth > 0 {
+                resetLeft = max(oldResetLeft, rect.right - inset - measuredWidth)
+            }
+        }
         if !context.isEmpty {
             WindowsDashboardDrawing.text(
                 context,

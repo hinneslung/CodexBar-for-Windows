@@ -1,0 +1,8 @@
+{
+  "refusal": {
+    "code": "foreign_process_termination_denied",
+    "message": "standard mode may terminate only a process proven to have been launched by this Cua runtime"
+  },
+  "status": "refused"
+}
+Fixture still running

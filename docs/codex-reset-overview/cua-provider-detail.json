@@ -1,0 +1,22 @@
+{
+  "_note": "Prefer `elements` — `tree_markdown` will continue to work but new fields will only be added to the structured side. Issue #22865: use `max_elements` / `max_depth` to bound the UIA walk on apps with very large trees.",
+  "degraded": true,
+  "degraded_reason": "ax_tree_empty: the UIA walk returned no actionable elements. The window may be a non-UIA surface (canvas/WebGL/custom-drawn) or its accessibility tree was not ready (Chromium/Electron require a UIA-enable + settle). Do not treat element data as authoritative — re-snapshot if the app just launched, otherwise switch to the visual path.",
+  "element_count": 0,
+  "elements": [],
+  "elements_complete": false,
+  "escalation": {
+    "reason": "non-AX surface — act by pixel (x,y) off the screenshot in this response (an element px action).",
+    "recommended": "px"
+  },
+  "pid": 5172,
+  "returned_element_count": 0,
+  "screenshot_file_path": "\\\\?\\C:\\Users\\hinne\\Projects\\CodexBar\\docs\\screenshots\\codex-reset-overview-provider-detail.png",
+  "screenshot_height": 482,
+  "screenshot_mime_type": "image/png",
+  "screenshot_width": 628,
+  "snapshot_id": "s00000002",
+  "total_element_count": 0,
+  "tree_markdown": "- Pane \"CodexBar\"\n",
+  "window_id": 1114846
+}

@@ -31,6 +31,7 @@ $calls = [Collections.Generic.List[object]]::new()
 function Invoke-InstallerProcess([string] $Path, [string[]] $Arguments) {
     $calls.Add(@{ Path = $Path; Arguments = $Arguments })
 }
+function Resolve-RegisteredUninstaller { $uninstaller }
 try {
     Install-Payload
     Uninstall-Payload

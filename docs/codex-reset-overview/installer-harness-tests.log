@@ -1,0 +1,34 @@
+Installer cleanup and registered-uninstaller tests passed.
+Installer stage: setup-1
+Installer stage: uninstall-1
+Installer stage: setup-2
+Installer stage: uninstall-2
+Kind: primary
+Stage: uninstall-2
+synthetic primary error
+At C:\Users\hinne\Projects\CodexBar\TestsLinux\StagingLauncher\test_windows_installer_diagnostics.ps1:52 char:11
++     try { throw 'synthetic primary error' } catch { Write-LifecycleFa …
++           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+at <ScriptBlock>, C:\Users\hinne\Projects\CodexBar\TestsLinux\StagingLauncher\test_windows_installer_diagnostics.ps1: line 52
+Installer stage: cleanup
+Kind: cleanup
+Stage: cleanup
+synthetic cleanup error
+At C:\Users\hinne\Projects\CodexBar\TestsLinux\StagingLauncher\test_windows_installer_diagnostics.ps1:54 char:11
++     try { throw 'synthetic cleanup error' } catch { Write-LifecycleFa …
++           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+at <ScriptBlock>, C:\Users\hinne\Projects\CodexBar\TestsLinux\StagingLauncher\test_windows_installer_diagnostics.ps1: line 54
+Installer stage: setup-3
+Installer stage setup-3 exited with code 1.
+Installer stage setup-3 exited with code 0.
+Installer stage: unwritable-diagnostics
+WARNING: Could not write stage log: Exception calling "AppendAllText" with "2" argument(s): "Could not find a part of the path 'C:\Users\hinne\AppData\Local\Temp\CodexBar\qa\installer-diagnostics-test-717bfe3e-a235-4dad-81f7-b2c1b6fc21cc\missing\child\stages.log'."
+Kind: primary
+Stage: unwritable-diagnostics
+original error
+At C:\Users\hinne\Projects\CodexBar\TestsLinux\StagingLauncher\test_windows_installer_diagnostics.ps1:90 char:11
++     try { throw 'original error' } catch { Write-LifecycleFailure $_  …
++           ~~~~~~~~~~~~~~~~~~~~~~
+at <ScriptBlock>, C:\Users\hinne\Projects\CodexBar\TestsLinux\StagingLauncher\test_windows_installer_diagnostics.ps1: line 90
+WARNING: Could not write primary failure report: Exception calling "WriteAllText" with "2" argument(s): "Could not find a part of the path 'C:\Users\hinne\AppData\Local\Temp\CodexBar\qa\installer-diagnostics-test-717bfe3e-a235-4dad-81f7-b2c1b6fc21cc\missing\child\primary-failure.txt'."
+Installer diagnostics tests passed (unique logs, separate errors, exits, timeout, write failure).

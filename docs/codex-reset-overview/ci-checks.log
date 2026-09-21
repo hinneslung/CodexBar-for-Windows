@@ -1,0 +1,20 @@
+Code commit: 667da70eb7a4c1ba86ff0e5250edbe8306fde45a
+Run: https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35559278837
+Selected completed-job log lines retrieved with gh api actions/jobs/<id>/logs.
+
+Lint: https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35559278837/job/106208925354
+2026-09-21T03:59:36.4767366Z Done linting! Found 0 violations, 0 serious in 2191 files.
+
+Windows ARM64: https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35559278837/job/106208925397
+2026-09-21T04:03:15.6559063Z Test run with 190 tests in 25 suites passed after 6.305 seconds.
+
+Windows x64: https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35559278837/job/106208925433
+2026-09-21T04:03:53.3340652Z Test run with 190 tests in 25 suites passed after 7.322 seconds.
+
+All Linux jobs also passed. Aggregate failed because this event retained the earlier draft status:
+Changes: https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35559278837/job/106208925400
+2026-09-21T03:58:13.5536382Z CI_PULL_REQUEST_DRAFT: true
+2026-09-21T03:58:13.5721878Z macOS Swift tests required but deferred until ready for review: Sources/CodexBarWindows/WindowsCanonicalCLIProviderClient.swift: not covered by portable docs/site checks.
+Aggregate: https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35559278837/job/106210652178
+2026-09-21T04:08:55.5672764Z macOS Swift tests are required but deferred; aggregate CI remains incomplete
+PR #9 was confirmed isDraft=false after this run; the final evidence push starts a ready-state run.

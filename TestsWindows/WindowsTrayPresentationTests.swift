@@ -298,5 +298,88 @@ struct WindowsTrayPresentationTests {
         #expect(WindowsTrayApplication.addTrayIconFlags & UINT(NIF_SHOWTIP) != 0)
         #expect(WindowsTrayApplication.updateTrayTooltipFlags & UINT(NIF_SHOWTIP) != 0)
     }
+
+    @Test
+    func `codex reset overview shows count with earliest expiry after plan`() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let cases: [([Date?], String, String?)] = [
+            ([now.addingTimeInterval(5 * 86400)], "Pro  •  1 reset (5d)", "(5d)"),
+            (
+                [now.addingTimeInterval(5 * 86400), now.addingTimeInterval(2 * 3600), nil],
+                "Pro  •  3 resets (2h)", "(2h)"),
+            ([nil, nil], "Pro  •  2 resets", nil),
+        ]
+        for (expiries, expected, paren) in cases {
+            let row = Self.resetRow(expiries: expiries, now: now)
+            #expect(row.overviewStatusText == expected)
+            #expect(row.accessibilityText.localizedCaseInsensitiveContains("reset"))
+            if let paren {
+                #expect(row.accessibilityText.contains(paren))
+            }
+        }
+    }
+
+    @Test
+    func `codex reset countdown buckets subminute intervals and excludes exact expiry`() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let cases: [(TimeInterval, String)] = [
+            (5 * 86400, "(5d)"),
+            (2 * 3600, "(2h)"),
+            (90, "(1m)"),
+            (59, "(<1m)"),
+            (0.5, "(<1m)"),
+        ]
+        for (interval, expected) in cases {
+            let row = Self.resetRow(expiries: [now.addingTimeInterval(interval)], now: now)
+            #expect(row.overviewStatusText.contains(expected))
+        }
+        let expired = Self.resetRow(
+            expiries: [now, now.addingTimeInterval(-10), now.addingTimeInterval(5 * 86400)], now: now)
+        #expect(expired.overviewStatusText == "Pro  •  1 reset (5d)")
+        #expect(expired.codexResetCredits?.availableExpiries.count == 1)
+    }
+
+    @Test
+    func `codex reset label hides for zero errors and non-codex providers`() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let hidden = [
+            Self.resetRow(expiries: [], now: now),
+            Self.resetRow(expiries: [now.addingTimeInterval(-10)], now: now),
+            Self.resetRow(
+                expiries: [now.addingTimeInterval(3600)],
+                now: now,
+                availability: .error,
+                errorText: "Usage unavailable"),
+            Self.resetRow(expiries: [now.addingTimeInterval(3600)], now: now, provider: .claude),
+        ]
+        for row in hidden {
+            #expect(!row.overviewStatusText.localizedCaseInsensitiveContains("reset"))
+            #expect(!row.accessibilityText.contains("available usage reset"))
+            #expect(!row.accessibilityText.contains("reset ("))
+            #expect(!row.accessibilityText.localizedCaseInsensitiveContains("resets"))
+            #expect(row.codexResetCredits?.availableExpiries.isEmpty ?? true)
+        }
+    }
+
+    private static func resetRow(
+        expiries: [Date?],
+        now: Date,
+        provider: WindowsProviderID = .codex,
+        availability: WindowsProviderAvailability = .available,
+        errorText: String? = nil) -> WindowsProviderRowPresentation
+    {
+        let snapshot = WindowsProviderSnapshot(
+            provider: provider,
+            availability: availability,
+            sourceText: "Automatic",
+            safeErrorText: errorText,
+            planText: "Plan: Pro",
+            codexResetCredits: WindowsCodexResetCredits(availableExpiries: expiries))
+        return WindowsDashboardPresentation.makeRow(
+            snapshot: snapshot,
+            profile: WindowsProviderConfiguration(id: provider, enabled: true, order: 0),
+            distinguishesProfile: false,
+            now: now)
+    }
 }
 #endif

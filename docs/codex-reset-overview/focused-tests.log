@@ -1,0 +1,370 @@
+warning: 'codexbar': dependency 'sparkle' is not used by any target
+warning: 'codexbar': dependency 'commander' is not used by any target
+warning: 'codexbar': dependency 'swift-crypto' is not used by any target
+warning: 'codexbar': dependency 'keyboardshortcuts' is not used by any target
+warning: 'codexbar': dependency 'vortex' is not used by any target
+warning: 'codexbar': dependency 'sweetcookiekit' is not used by any target
+[0/1] Planning build
+Building for debugging...
+[0/6] Write sources
+[2/6] Write swift-version--3C6C3A12A4DEA587.txt
+[4/12] Compiling CodexBarWindows WindowsPopupActivationPolicy.swift
+[5/12] Compiling CodexBarWindows WindowsCanonicalCLIProviderClient.swift
+[6/12] Compiling CodexBarWindows WindowsTrayApplication.swift
+[7/12] Compiling CodexBarWindows WindowsProviderModels.swift
+[8/12] Emitting module CodexBarWindows
+[9/12] Compiling CodexBarWindows WindowsPopupWindow.swift
+[10/20] Compiling CodexBarWindows WindowsCanonicalCLIDiscoveryCache.swift
+[11/20] Compiling CodexBarWindows WindowsProviderDataSource.swift
+[12/20] Compiling CodexBarWindows WindowsMain.swift
+[13/20] Compiling CodexBarWindows WindowsProviderDiagnosticDecoder.swift
+[14/20] Compiling CodexBarWindows WindowsUnavailableProviderAdapter.swift
+[15/20] Compiling CodexBarWindows WindowsProviderSnapshotPublisher.swift
+[16/20] Compiling CodexBarWindows WindowsProviderSourceStatus.swift
+[17/20] Compiling CodexBarWindows WindowsConfiguredProviderDataSource.swift
+[18/21] Wrapping AST for CodexBarWindows for debugging
+[19/26] Write Objects.LinkFileList
+[20/26] Linking CodexBar.exe
+[22/53] Compiling CodexBarWindowsPortabilityTests WindowsWSLSourceDiscoveryTests.swift
+[23/53] Compiling CodexBarWindowsPortabilityTests WindowsTrayPresentationTests.swift
+[24/53] Compiling CodexBarWindowsPortabilityTests WindowsUpstreamConfigurationClientTests.swift
+[25/54] Compiling CodexBarWindowsPortabilityTests WindowsTextInputKeyboardPolicyTests.swift
+[26/54] Compiling CodexBarWindowsPortabilityTests WindowsWideStringTests.swift
+[27/54] Compiling CodexBarWindowsPortabilityTests WindowsRefreshGateTests.swift
+[28/54] Compiling CodexBarWindowsPortabilityTests WindowsProviderSourceStatusTests.swift
+[29/54] Compiling CodexBarWindowsPortabilityTests WindowsStartupTaskTests.swift
+[30/54] Compiling CodexBarWindowsPortabilityTests WindowsBrowserCredentialParserTests.swift
+[31/54] Compiling CodexBarWindowsPortabilityTests WindowsBundledWSLCLIProvisionerTests.swift
+[32/54] Compiling CodexBarWindowsPortabilityTests WindowsAppConfigurationTests.swift
+[33/54] Compiling CodexBarWindowsPortabilityTests WindowsApplicationIdentityTests.swift
+[34/54] Compiling CodexBarWindowsPortabilityTests WindowsConfiguredProviderLiveTests.swift
+[35/54] Compiling CodexBarWindowsPortabilityTests WindowsHiddenProcessRunnerTests.swift
+[36/54] Compiling CodexBarWindowsPortabilityTests WindowsMeterGeometryTests.swift
+[37/54] Compiling CodexBarWindowsPortabilityTests WindowsConfiguredProviderDataSourceTests.swift
+[38/54] Compiling CodexBarWindowsPortabilityTests WindowsFinalCredentialAlignmentTests.swift
+[39/54] Compiling CodexBarWindowsPortabilityTests WindowsNamedProviderProfileTests.swift
+[40/54] Compiling CodexBarWindowsPortabilityTests WindowsProviderCredentialBridgeTests.swift
+[41/54] Compiling CodexBarWindowsPortabilityTests WindowsProviderSourcePresentationTests.swift
+[42/54] Compiling CodexBarWindowsPortabilityTests WindowsProviderDiagnosticDecoderTests.swift
+[43/54] Compiling CodexBarWindowsPortabilityTests WindowsCanonicalCLIDiscoveryCacheTests.swift
+[44/54] Compiling CodexBarWindowsPortabilityTests WindowsCanonicalCLIProviderClientTests.swift
+[45/54] Compiling CodexBarWindowsPortabilityTests WindowsPopupActivationPolicyTests.swift
+[46/54] Compiling CodexBarWindowsPortabilityTests WindowsProviderOperationLockTests.swift
+[47/54] Emitting module CodexBarWindowsPortabilityTests
+[48/54] Compiling CodexBarWindowsPortabilityTests WindowsProviderSnapshotPublisherTests.swift
+[49/54] Compiling CodexBarWindowsPortabilityTests WindowsProviderBrandingTests.swift
+[50/59] C:\Users\hinne\Projects\CodexBar\.build\x86_64-unknown-windows-msvc\debug\CodexBarPackageDiscoveredTests.derived\all-discovered-tests.swift
+[51/59] Write sources
+[52/59] Wrapping AST for CodexBarWindowsPortabilityTests for debugging
+[54/62] Compiling CodexBarPackageDiscoveredTests all-discovered-tests.swift
+[55/62] Compiling CodexBarPackageDiscoveredTests CodexBarWindowsPortabilityTests.swift
+[56/62] Emitting module CodexBarPackageDiscoveredTests
+[58/61] Emitting module CodexBarPackageTests
+[59/61] Write Objects.LinkFileList
+[60/61] Linking CodexBarPackageTests.xctest
+Build complete! (59.90s)
+Test Suite 'Selected tests' started at 2026-09-21 11:44:54.826
+
+Test Suite 'Selected tests' passed at 2026-09-21 11:44:54.842
+
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.0 (0.0) seconds
+
+◊ Test run started.
+
+→ Testing Library Version: 6.3.3 (48d727cc1cf4eda)
+
+→ Target Platform: x86_64-unknown-windows-msvc
+
+◊ Suite "Windows canonical CLI provider client" started.
+
+◊ Test "canonical upstream payload projects arbitrary windows and credits" started.
+
+√ Test "canonical upstream payload projects arbitrary windows and credits" passed after 0.009 seconds.
+
+◊ Test "unread credits stay absent through decoder and presentation" started.
+
+√ Test "unread credits stay absent through decoder and presentation" passed after 0.001 seconds.
+
+◊ Test "read and legacy credits preserve genuine zero balances" started.
+
+√ Test "read and legacy credits preserve genuine zero balances" passed after 0.001 seconds.
+
+◊ Test "nonboolean credit read status fails decoding" started.
+
+√ Test "nonboolean credit read status fails decoding" passed after 0.001 seconds.
+
+◊ Test "WSL invocation uses direct arguments without a shell" started.
+
+√ Test "WSL invocation uses direct arguments without a shell" passed after 0.001 seconds.
+
+◊ Test "automatic diagnostic WSL invocation uses exact argv and longer timeout" started.
+
+√ Test "automatic diagnostic WSL invocation uses exact argv and longer timeout" passed after 0.001 seconds.
+
+◊ Test "staged WSL invocation defaults to usage and supports exact diagnose mode" started.
+
+√ Test "staged WSL invocation defaults to usage and supports exact diagnose mode" passed after 0.001 seconds.
+
+◊ Test "canonical WSL discovery accepts only a sanitized absolute codexbar path" started.
+
+√ Test "canonical WSL discovery accepts only a sanitized absolute codexbar path" passed after 0.001 seconds.
+
+◊ Test "provider usage retries only transient child failures" started.
+
+√ Test "provider usage retries only transient child failures" passed after 0.001 seconds.
+
+◊ Test "staged provider usage retries one failed attempt after the shared delay" started.
+
+√ Test "staged provider usage retries one failed attempt after the shared delay" passed after 0.001 seconds.
+
+◊ Test "diagnostic retry remains bounded to one retry within the mode-specific budget" started.
+
+√ Test "diagnostic retry remains bounded to one retry within the mode-specific budget" passed after 0.001 seconds.
+
+◊ Test "stale credentials discard the complete refresh instead of publishing cached usage" started.
+
+√ Test "stale credentials discard the complete refresh instead of publishing cached usage" passed after 0.001 seconds.
+
+◊ Test "ordinary fetch failures retain their final publication authority check" started.
+
+√ Test "ordinary fetch failures retain their final publication authority check" passed after 0.001 seconds.
+
+◊ Test "balance identity is promoted instead of being shown as a plan" started.
+
+√ Test "balance identity is promoted instead of being shown as a plan" passed after 0.001 seconds.
+
+◊ Test "plain point identity is promoted as an allocation-free balance" started.
+
+√ Test "plain point identity is promoted as an allocation-free balance" passed after 0.001 seconds.
+
+◊ Test "decoder keeps only available reset expiries and ignores the server count" started.
+
+√ Test "decoder keeps only available reset expiries and ignores the server count" passed after 0.001 seconds.
+
+◊ Test "missing and malformed reset inventory decode as absent without losing usage" started.
+
+√ Test "missing and malformed reset inventory decode as absent without losing usage" passed after 0.001 seconds.
+
+√ Suite "Windows canonical CLI provider client" passed after 0.023 seconds.
+
+◊ Suite "Windows named provider profiles" started.
+
+◊ Test "legacy configuration migrates stable default identities and round trips" started.
+
+√ Test "legacy configuration migrates stable default identities and round trips" passed after 0.002 seconds.
+
+◊ Test "new profiles use unique IDs and start without copied routing or credentials" started.
+
+√ Test "new profiles use unique IDs and start without copied routing or credentials" passed after 0.008 seconds.
+
+◊ Test "duplicate and cross provider reserved identities fail decoding" started.
+
+√ Test "duplicate and cross provider reserved identities fail decoding" passed after 0.001 seconds.
+
+◊ Test "profile names and Codex homes enforce safe bounded input" started.
+
+√ Test "profile names and Codex homes enforce safe bounded input" passed after 0.001 seconds.
+
+◊ Test "blank profile names persist while missing legacy names remain default" started.
+
+√ Test "blank profile names persist while missing legacy names remain default" passed after 0.001 seconds.
+
+◊ Test "one blank name is valid while a second blank is a duplicate for its provider" started.
+
+√ Test "one blank name is valid while a second blank is a duplicate for its provider" passed after 0.001 seconds.
+
+◊ Test "Codex staged config selects only the requested profile home with automatic source" started.
+
+√ Test "Codex staged config selects only the requested profile home with automatic source" passed after 0.001 seconds.
+
+◊ Test "Codex home resolves tilde absolute spaces and missing directory without fallback" started.
+
+√ Test "Codex home resolves tilde absolute spaces and missing directory without fallback" passed after 0.001 seconds.
+
+◊ Test "legacy encrypted record without profile identity loads from original provider file" started.
+
+√ Test "legacy encrypted record without profile identity loads from original provider file" passed after 0.010 seconds.
+
+◊ Test "same provider browser sessions save load and clear independently by profile" started.
+
+√ Test "same provider browser sessions save load and clear independently by profile" passed after 0.018 seconds.
+
+◊ Test "same provider credentials save and clear independently by profile" started.
+
+√ Test "same provider credentials save and clear independently by profile" passed after 0.026 seconds.
+
+◊ Test "profile removal skips nonexistent Codex vault schema and clears manual profile only" started.
+
+√ Test "profile removal skips nonexistent Codex vault schema and clears manual profile only" passed after 0.008 seconds.
+
+◊ Test "configured datasource keeps concurrent same provider profiles and authority separate" started.
+
+√ Test "configured datasource keeps concurrent same provider profiles and authority separate" passed after 0.047 seconds.
+
+◊ Test "presentation distinguishes named profiles while leaving one default familiar" started.
+
+√ Test "presentation distinguishes named profiles while leaving one default familiar" passed after 0.001 seconds.
+
+◊ Test "automatic staged invocation keeps exact CLI source and presentation attribution" started.
+
+√ Test "automatic staged invocation keeps exact CLI source and presentation attribution" passed after 0.001 seconds.
+
+◊ Test "publication authority rejects one profile without crossing same provider sibling" started.
+
+√ Test "publication authority rejects one profile without crossing same provider sibling" passed after 0.001 seconds.
+
+◊ Test "routing changes invalidate caches while rename alone does not" started.
+
+√ Test "routing changes invalidate caches while rename alone does not" passed after 0.001 seconds.
+
+◊ Test "codex reset counts stay isolated between named profiles" started.
+
+√ Test "codex reset counts stay isolated between named profiles" passed after 0.001 seconds.
+
+√ Suite "Windows named provider profiles" passed after 0.126 seconds.
+
+◊ Suite "Windows provider source presentation" started.
+
+◊ Test "formatter keeps the distribution first for every source kind" started.
+
+√ Test "formatter keeps the distribution first for every source kind" passed after 0.001 seconds.
+
+◊ Test "enabled settings and provider detail use the identical shared value" started.
+
+√ Test "enabled settings and provider detail use the identical shared value" passed after 0.001 seconds.
+
+◊ Test "enabled settings uses configured fallback when no snapshot exists" started.
+
+√ Test "enabled settings uses configured fallback when no snapshot exists" passed after 0.001 seconds.
+
+◊ Test "automatic credential guidance reflects verified provider methods" started.
+
+√ Test "automatic credential guidance reflects verified provider methods" passed after 0.001 seconds.
+
+◊ Test "disabled summaries compose verified capabilities in order without duplicates" started.
+
+√ Test "disabled summaries compose verified capabilities in order without duplicates" passed after 0.001 seconds.
+
+◊ Test "manual capability summaries preserve session and browser credential labels" started.
+
+√ Test "manual capability summaries preserve session and browser credential labels" passed after 0.001 seconds.
+
+◊ Test "every usable provider has a verified capability subtitle" started.
+
+√ Test "every usable provider has a verified capability subtitle" passed after 0.001 seconds.
+
+◊ Test "provider sign-in metadata remains tied to reviewed upstream routes" started.
+
+√ Test "provider sign-in metadata remains tied to reviewed upstream routes" passed after 0.004 seconds.
+
+◊ Test "unavailable provider metadata is the single configuration gate" started.
+
+√ Test "unavailable provider metadata is the single configuration gate" passed after 0.001 seconds.
+
+◊ Test "canonical source decoding normalizes generic and preserves specific upstream labels" started.
+
+√ Test "canonical source decoding normalizes generic and preserves specific upstream labels" passed after 0.004 seconds.
+
+◊ Test "canonical source decoding recognizes provider and mechanism patterns" started.
+
+√ Test "canonical source decoding recognizes provider and mechanism patterns" passed after 0.001 seconds.
+
+◊ Test "canonical source decoding rejects controls and bounds combining sequences" started.
+
+√ Test "canonical source decoding rejects controls and bounds combining sequences" passed after 0.002 seconds.
+
+◊ Test "manual and OpenCode routes override lower level upstream attribution" started.
+
+√ Test "manual and OpenCode routes override lower level upstream attribution" passed after 0.001 seconds.
+
+◊ Test "failed automatic fetch does not claim a concrete mechanism" started.
+
+√ Test "failed automatic fetch does not claim a concrete mechanism" passed after 0.001 seconds.
+
+◊ Test "stale-success presentation retains the successful resolved source" started.
+
+√ Test "stale-success presentation retains the successful resolved source" passed after 0.001 seconds.
+
+◊ Test "stale values use the current explicit manual route" started.
+
+√ Test "stale values use the current explicit manual route" passed after 0.001 seconds.
+
+◊ Test "refreshing presentation overlays the selected manual route" started.
+
+√ Test "refreshing presentation overlays the selected manual route" passed after 0.001 seconds.
+
+◊ Test "refreshing presentation removes a cleared manual route" started.
+
+√ Test "refreshing presentation removes a cleared manual route" passed after 0.001 seconds.
+
+◊ Test "cached reset expiries survive stale success retention and refresh overlay" started.
+
+√ Test "cached reset expiries survive stale success retention and refresh overlay" passed after 0.001 seconds.
+
+√ Suite "Windows provider source presentation" passed after 0.018 seconds.
+
+◊ Suite WindowsTrayPresentationTests started.
+
+◊ Test "presentation defaults to the initially enabled providers" started.
+
+√ Test "presentation defaults to the initially enabled providers" passed after 0.001 seconds.
+
+◊ Test "presentation clamps percent and normalizes multiline display text" started.
+
+√ Test "presentation clamps percent and normalizes multiline display text" passed after 0.001 seconds.
+
+◊ Test "presentation names OpenCode without exposing bridge terminology" started.
+
+√ Test "presentation names OpenCode without exposing bridge terminology" passed after 0.001 seconds.
+
+◊ Test "presentation preserves structured windows for overview and provider details" started.
+
+√ Test "presentation preserves structured windows for overview and provider details" passed after 0.001 seconds.
+
+◊ Test "balance only provider promotes its balance in overview context" started.
+
+√ Test "balance only provider promotes its balance in overview context" passed after 0.001 seconds.
+
+◊ Test "global usage mode formats a compact tray tooltip with reset countdown" started.
+
+√ Test "global usage mode formats a compact tray tooltip with reset countdown" passed after 0.001 seconds.
+
+◊ Test "tooltip omits quota label when governing window has no reset information" started.
+
+√ Test "tooltip omits quota label when governing window has no reset information" passed after 0.001 seconds.
+
+◊ Test "tray tooltip compacts textual reset duration when date is unavailable" started.
+
+√ Test "tray tooltip compacts textual reset duration when date is unavailable" passed after 0.001 seconds.
+
+◊ Test "reset labels use duration weekday then date without reset prefix or timezone" started.
+
+√ Test "reset labels use duration weekday then date without reset prefix or timezone" passed after 0.001 seconds.
+
+◊ Test "tray tooltip mirrors every active overview provider in configured order" started.
+
+√ Test "tray tooltip mirrors every active overview provider in configured order" passed after 0.001 seconds.
+
+◊ Test "tray tooltip omits only whole provider lines when active list exceeds Windows capacity" started.
+
+√ Test "tray tooltip omits only whole provider lines when active list exceeds Windows capacity" passed after 0.001 seconds.
+
+◊ Test "version four tray icon explicitly enables the standard hover tooltip" started.
+
+√ Test "version four tray icon explicitly enables the standard hover tooltip" passed after 0.001 seconds.
+
+◊ Test "codex reset overview shows count with earliest expiry after plan" started.
+
+√ Test "codex reset overview shows count with earliest expiry after plan" passed after 0.001 seconds.
+
+◊ Test "codex reset countdown buckets subminute intervals and excludes exact expiry" started.
+
+√ Test "codex reset countdown buckets subminute intervals and excludes exact expiry" passed after 0.001 seconds.
+
+◊ Test "codex reset label hides for zero errors and non-codex providers" started.
+
+√ Test "codex reset label hides for zero errors and non-codex providers" passed after 0.001 seconds.
+
+√ Suite WindowsTrayPresentationTests passed after 0.004 seconds.
+
+√ Test run with 69 tests in 4 suites passed after 0.173 seconds.

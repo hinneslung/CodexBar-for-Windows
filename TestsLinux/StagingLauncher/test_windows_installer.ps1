@@ -36,7 +36,6 @@ Write-Host "Installer diagnostics: $DiagnosticsDirectory"
 $installDirectory = Join-Path $work 'installed'
 $sourceDirectory = Join-Path $work 'source'
 $exe = Join-Path $installDirectory 'CodexBar.exe'
-$uninstaller = Join-Path $installDirectory 'unins000.exe'
 $savedEnvironment = @{}
 foreach ($name in @('LOCALAPPDATA', 'CODEXBAR_WINDOWS_OFFLINE', 'PATH')) {
     $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
@@ -46,6 +45,7 @@ $taskCreated = $false
 $installCount = 0
 $uninstallCount = 0
 $payloadInstalled = $false
+$primaryFailure = $null
 $lifecycleStage = 'prepare-payload'
 
 function Write-LifecycleStage([string] $Name) {
@@ -75,6 +75,26 @@ function Invoke-InstallerProcess([string] $Path, [string[]] $Arguments) {
     Write-Host "Installer stage $lifecycleStage exited with code $($process.ExitCode)."
     if ($process.ExitCode -ne 0) { throw "Installer lifecycle failed at ${lifecycleStage}: $($process.ExitCode)" }
 }
+function Resolve-RegisteredUninstaller {
+    $key = $registry.OpenSubKey($registryPath)
+    if ($null -eq $key) { throw 'Per-user uninstall registration is missing.' }
+    try {
+        $command = $key.GetValue('UninstallString')
+    } finally { $key.Dispose() }
+    if ($command -isnot [string] -or $command -notmatch '^"([^"]+)"$') {
+        throw 'Registered uninstall command is missing or malformed.'
+    }
+    $path = [IO.Path]::GetFullPath($Matches[1])
+    $expectedDirectory = [IO.Path]::GetFullPath($installDirectory)
+    if ([IO.Path]::GetDirectoryName($path) -ine $expectedDirectory) {
+        throw 'Registered uninstaller points outside the installation directory.'
+    }
+    if ([IO.Path]::GetFileName($path) -notmatch '^unins[0-9]+\.exe$' -or
+        -not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        throw 'Registered uninstaller is missing or invalid.'
+    }
+    $path
+}
 function Install-Payload {
     $script:installCount++
     # Retain cleanup responsibility even if setup exits after a partial install.
@@ -88,6 +108,7 @@ function Uninstall-Payload {
     $script:uninstallCount++
     Write-LifecycleStage "uninstall-$uninstallCount"
     $log = Join-Path $DiagnosticsDirectory "uninstall-$uninstallCount.log"
+    $uninstaller = Resolve-RegisteredUninstaller
     Invoke-InstallerProcess $uninstaller @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=`"$log`"")
     # Inno may delete its executable asynchronously after success. Its continued existence is
     # not evidence of an installed payload and must not trigger a second uninstall in finally.
@@ -157,6 +178,7 @@ try {
     $appProcess = Start-Process -FilePath $exe -WorkingDirectory $installDirectory -PassThru -WindowStyle Hidden
     if ($appProcess.WaitForExit(5000)) { throw 'Installed app did not stay running for uninstall guard test.' }
     $guardLog = Join-Path $DiagnosticsDirectory 'uninstall-guard.log'
+    $uninstaller = Resolve-RegisteredUninstaller
     $blocked = Start-Process -FilePath $uninstaller -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART',
         "/LOG=`"$guardLog`"") `
         -PassThru -WindowStyle Hidden
@@ -198,16 +220,17 @@ try {
     Write-LifecycleStage 'complete'
     Write-Host "Installer lifecycle passed on $expected. Evidence: $work"
 } catch {
+    $primaryFailure = $_
     Write-LifecycleFailure $_ 'primary'
     throw
 } finally {
     try {
         Write-LifecycleStage 'cleanup'
         if ($null -ne $appProcess -and -not $appProcess.HasExited) { Stop-Process -Id $appProcess.Id -Force }
-        if ($payloadInstalled -and (Test-Path -LiteralPath $uninstaller)) { Uninstall-Payload }
+        if ($payloadInstalled) { Uninstall-Payload }
     } catch {
         Write-LifecycleFailure $_ 'cleanup'
-        throw
+        if ($null -eq $primaryFailure) { throw }
     } finally {
         try {
             if ($taskCreated) { Unregister-ScheduledTask -TaskPath '\' -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue }

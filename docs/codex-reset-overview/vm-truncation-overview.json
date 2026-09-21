@@ -1,0 +1,30 @@
+{
+  "_note": "Prefer `elements` — `tree_markdown` will continue to work but new fields will only be added to the structured side. Issue #22865: use `max_elements` / `max_depth` to bound the UIA walk on apps with very large trees.",
+  "app_name": "CodexBarResetSmoke.exe",
+  "degraded": true,
+  "degraded_reason": "ax_tree_empty: the UIA walk returned no actionable elements. The window may be a non-UIA surface (canvas/WebGL/custom-drawn) or its accessibility tree was not ready (Chromium/Electron require a UIA-enable + settle). Do not treat element data as authoritative — re-snapshot if the app just launched, otherwise switch to the visual path.",
+  "element_count": 0,
+  "elements": [],
+  "elements_complete": false,
+  "escalation": {
+    "reason": "non-AX surface — act by pixel (x,y) off the screenshot in this response (an element px action).",
+    "recommended": "px"
+  },
+  "pid": 2160,
+  "returned_element_count": 0,
+  "screenshot_file_path": "\\\\?\\C:\\Users\\hinne\\AppData\\Local\\Temp\\CodexBar\\qa\\reset-overview\\overview.png",
+  "screenshot_height": 216,
+  "screenshot_mime_type": "image/png",
+  "screenshot_width": 358,
+  "snapshot_id": "s0000008b",
+  "total_element_count": 0,
+  "tree_markdown": "- Pane \"CodexBar\"\n",
+  "window_bounds": {
+    "height": 218,
+    "width": 360,
+    "x": 1931,
+    "y": 968
+  },
+  "window_id": 1966182,
+  "window_title": "CodexBar"
+}
