@@ -1,8 +1,11 @@
 # Independent review: Codex reset overview
 
-Reviewer: independent Fattie profile, reporting to Pillow PIC  
-Source of truth: `docs/codex-reset-overview/plan.md`  
-Reviewed implementation: `c03ebd60a` against `fork/windows-native-app`  
+Reviewer: independent Fattie profile, reporting to Pillow PIC
+
+Source of truth: `docs/codex-reset-overview/plan.md`
+
+Reviewed implementation: `c03ebd60a` against `fork/windows-native-app`
+
 Scope: the three changed production files and four changed `TestsWindows` files requested by the PIC
 
 ## Verdict
@@ -40,3 +43,13 @@ Suggested follow-up: add one presentation case with a governing usage window and
 - The conservative all-or-nothing handling of a malformed reset inventory is consistent with the requirement to hide unknown/malformed inventory while preserving ordinary usage.
 - The model additions are bounded and reuse `WindowsResetLabelFormatter.compact`; no upstream CLI/Core change is introduced.
 - The longer Business fixture line ellipsizes the trailing balance while keeping the new reset count/expiry visible. That is consistent with the existing compact single-line layout and does not obscure the feature's primary information.
+
+## Final installer harness repair review
+
+Verdict: no blocker.
+
+The repair directly addresses the observed x64 failure where a later setup registered `unins001.exe` while stale `unins000.exe` remained during asynchronous self-deletion. `Resolve-RegisteredUninstaller` reads the current per-user uninstall registration for every uninstall attempt, accepts only one fully quoted executable path with no command suffix, disposes the registry key in `finally`, canonicalizes the path, requires its parent to equal the synthetic install directory, restricts the basename to `unins[0-9]+.exe`, and requires an existing leaf. The running-app guard, ordinary uninstall path, and final cleanup all use fresh resolution.
+
+Cleanup retains responsibility after partial setup or failed uninstall. If cleanup also fails, it records separate cleanup evidence without replacing an active primary error; a standalone cleanup failure still fails the lifecycle test. The offline AST test covers stale `unins000` beside registered `unins001`, registration changes, unsafe/malformed/missing registrations, missing leaves, and the prior cleanup-state transitions. The diagnostics test adds only the resolver stub required by its extracted-function harness. Pillow reports both offline PowerShell 7 scripts passed; this reviewer did not rerun them.
+
+Scope is appropriately bounded to the three installer test scripts. No production or workflow change is justified, preserving the original plan's minimal-change constraint.

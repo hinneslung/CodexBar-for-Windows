@@ -1,0 +1,23 @@
+Run: https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35559280618
+Code commit: 667da70eb7a4c1ba86ff0e5250edbe8306fde45a
+
+ARM64 job: https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35559280618/job/106210747050
+2026-09-21T04:13:44.2993711Z Test run with 190 tests in 25 suites passed after 6.794 seconds.
+2026-09-21T04:18:33.3713982Z Installer lifecycle passed on Arm64.
+
+x64 job: https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35559280618/job/106210747066
+Build, tests, packaged-app startup, and initial install/upgrade checks passed.
+2026-09-21T04:16:31.6401641Z Stage: uninstall-2
+2026-09-21T04:16:31.6403188Z Failed to start installed/unins000.exe: The system cannot find the file specified.
+
+Downloaded artifact codexbar-installer-diagnostics-x86_64, selected lines:
+setup-3.log:
+2026-09-21 04:16:25.805 Creating new uninstall log: installed/unins001.dat
+2026-09-21 04:16:25.806 Dest filename: installed/unins001.exe
+uninstall-1.log:
+2026-09-21 04:16:25.848 Uninstallation process succeeded.
+2026-09-21 04:16:25.850 Log closed.
+
+Diagnosis: old uninstaller cleanup overlapped reinstall; Inno correctly selected suffix 001.
+The test incorrectly reused a hard-coded suffix 000. Repair the harness to resolve and
+validate the current registered uninstaller. Do not retry until this assumption is removed.

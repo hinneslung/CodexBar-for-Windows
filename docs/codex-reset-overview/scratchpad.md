@@ -6,7 +6,7 @@
 - Branch: `windows/codex-reset-overview`.
 - Base: `fork/windows-native-app` at `0d9f742e0`; fetched and confirmed synchronized.
 - Original plan: [plan.md](plan.md). Team rules: [rules.md](rules.md).
-- Status: implementation, native QA, and independent review complete; lint fix verified locally; pipelines underway.
+- Status: feature implementation, native QA, and review complete; installer harness repair passed offline tests; final pipelines pending.
 - User authorized CUA native app launch, stopping an existing instance if necessary,
   and visual verification. Real-account provider probes have not been requested.
 
@@ -51,7 +51,19 @@
   fixed only those sites. Native 190-test suite passed again; formatter is clean.
 - Local pinned SwiftLint needs Linux SourceKit, absent in WSL; use the clean CI runner.
 - Independent review complete: no correctness blockers; see [review-independent.md](review-independent.md).
-- Pending: final clean-checkout CI, manual installer e2e, fixture cleanup.
+- Clean-checkout lint and all Windows/Linux jobs passed. Aggregate failed because
+  the event retained draft status and deferred required macOS compatibility tests.
+  PR is confirmed ready; the next push starts the full compatibility run.
+- Manual ARM64 installer lifecycle passed. x64 uncovered an existing test-harness
+  assumption: reinstall used `unins001.exe`, while the test invoked `unins000.exe`.
+  PIC assigned a bounded test repair and independent review; production
+  app and installer behavior remain unchanged. See [initial evidence](installer-e2e-initial.log).
+  Repair touches three existing test scripts (+85/-7): lifecycle resolver (+26/-3),
+  fake-registry cleanup tests (+58/-4), and one diagnostics resolver stub (+1).
+  Both offline scripts passed under PowerShell 7; [log](installer-harness-tests.log).
+- User quit the three fixture apps; process readback confirms none remain and the
+  installed CodexBar PID 3732 is still running. CUA and browser QA sessions closed.
+- Pending: final clean-checkout CI and manual installer e2e after harness repair.
 
 ## Reviewer decision log
 
@@ -66,10 +78,16 @@
 - Optional review finding: exact plan/reset/balance ordering lacks a dedicated unit assertion.
   Correct observation, low urgency, deferred per user instruction. Production order and
   native screenshots already demonstrate the required behavior; no scope expansion.
+- Installer review: PIC accepts fresh registered-path lookup, strict command/path validation,
+  registry disposal, and preservation of a primary error if cleanup also fails. These
+  address the observed harness failure without changing app, installer, or workflow code.
+  Independent final diff review found no blockers; PIC agrees after inspecting the diff
+  and running both offline scripts. See the appended [review](review-independent.md).
 
 ## Delivery links
 
 - [PR #9](https://github.com/hinneslung/CodexBar-for-Windows/pull/9), targeting `windows-native-app`.
-- [PR CI](https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35558929650).
-- [Manual packaging/installer e2e](https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35558929791).
-- Initial validated code commit: `c03ebd60acdb5fc0707d38c35d42ca9cacb7918e`.
+- [Code validation CI](https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35559278837).
+- [Manual packaging/installer e2e](https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35559280618).
+- [Current PR checks](https://github.com/hinneslung/CodexBar-for-Windows/pull/9/checks).
+- Validated feature code commit: `667da70eb7a4c1ba86ff0e5250edbe8306fde45a`.
