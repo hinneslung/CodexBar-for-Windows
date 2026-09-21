@@ -390,6 +390,7 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
             balanceText: balanceText,
             accountText: accountText,
             updatedAt: updatedAt,
+            // Provider-specific by design: This inventory belongs only to Codex CLI accounts.
             codexResetCredits: requestedProvider == .codex ? payload.usage?.codexResetCredits.map {
                 WindowsCodexResetCredits(
                     availableExpiries: $0.credits.reduce(into: [Date?]()) { expiries, credit in

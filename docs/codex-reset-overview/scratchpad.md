@@ -6,7 +6,7 @@
 - Branch: `windows/codex-reset-overview`.
 - Base: `fork/windows-native-app` at `0d9f742e0`; fetched and confirmed synchronized.
 - Original plan: [plan.md](plan.md). Team rules: [rules.md](rules.md).
-- Status: feature implementation, native QA, and review complete; installer harness repair passed offline tests; final pipelines pending.
+- Status: feature/review/native QA complete; manual x64/ARM64 e2e passed; final CI follows a two-comment architecture correction.
 - User authorized CUA native app launch, stopping an existing instance if necessary,
   and visual verification. Real-account provider probes have not been requested.
 
@@ -44,7 +44,7 @@
 - CUA fixture smoke passed all three inventory scenarios and detail/back navigation;
   see [verification.md](verification.md) and `docs/screenshots/codex-reset-overview-*.png`.
 - agent-browser opened PR #9 and captured its page title, snapshot, and screenshot.
-- Source/test diff after formatting: 139 production additions, 222 test additions,
+- Source/test diff after formatting and architecture comments: 141 production additions, 222 test additions,
   10 deletions. Slightly over the estimate due to strict optional decoding/copy paths
   and meaningful edge-case coverage. Epic evidence is separate from implementation size.
 - Initial CI: Windows ARM64 passed; lint failed on three `empty_count` sites. Fattie
@@ -63,7 +63,12 @@
   Both offline scripts passed under PowerShell 7; [log](installer-harness-tests.log).
 - User quit the three fixture apps; process readback confirms none remain and the
   installed CodexBar PID 3732 is still running. CUA and browser QA sessions closed.
-- Pending: final clean-checkout CI and manual installer e2e after harness repair.
+- Manual e2e after harness repair passed on both x64 and ARM64; [final log](installer-e2e-final.log).
+- Ready-state CI passed Windows/Linux/lint but macOS shard 0 required justification
+  comments on the two new Codex gates. Added exactly those two comments, shortened
+  them to the formatter limit, and verified formatting. No behavior change.
+  The second macOS shard passed; the architecture group was the only failed group.
+- Pending: final clean-checkout CI after the comment-only correction.
 
 ## Reviewer decision log
 
@@ -88,6 +93,6 @@
 
 - [PR #9](https://github.com/hinneslung/CodexBar-for-Windows/pull/9), targeting `windows-native-app`.
 - [Code validation CI](https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35559278837).
-- [Manual packaging/installer e2e](https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35559280618).
+- [Successful manual packaging/installer e2e](https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35561825143).
 - [Current PR checks](https://github.com/hinneslung/CodexBar-for-Windows/pull/9/checks).
 - Validated feature code commit: `667da70eb7a4c1ba86ff0e5250edbe8306fde45a`.

@@ -1,0 +1,14 @@
+Run: https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35561819837
+macOS shard 0: https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35561819837/job/106216024791
+
+2026-09-21T05:04:39.0367630Z ProviderArchitectureGatekeeperTests.swift:271:
+cross provider case clusters are derived or specifically justified
+Sources/CodexBarWindows/WindowsCanonicalCLIProviderClient.swift:393: unjustified provider-specific construct (codex; references: 1)
+Sources/CodexBarWindows/WindowsProviderModels.swift:741: unjustified provider-specific construct (codex; references: 2)
+Instruction: add '// Provider-specific by design: <specific reason>' immediately before each cluster.
+
+Correction: document that the inventory belongs only to Codex CLI accounts and only
+Codex account rows own it. Two comments only; no behavior or test change.
+Pinned SwiftFormat passed on both corrected files; swiftformat-final.log.
+The other macOS shard passed: https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35561819837/job/106216024650
+This architecture justification failure was the only failed test group in the full run.

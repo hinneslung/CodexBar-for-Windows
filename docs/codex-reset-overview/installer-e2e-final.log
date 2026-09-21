@@ -1,0 +1,14 @@
+Commit: 7b172fa251edd309e75203ed539d1e048297513a
+Run: https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35561825143
+Conclusion: success. All Linux payload and native Windows packaging jobs passed.
+The following source correction adds only two architecture justification comments.
+
+x64: https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35561825143/job/106217710417
+2026-09-21T04:56:50.6352416Z Test run with 190 tests in 25 suites passed after 2.857 seconds.
+2026-09-21T05:00:36.2947724Z Installer cleanup and registered-uninstaller tests passed.
+2026-09-21T05:01:29.9428128Z Installer lifecycle passed on X64.
+
+ARM64: https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35561825143/job/106217710392
+2026-09-21T04:55:04.1099608Z Test run with 190 tests in 25 suites passed after 5.500 seconds.
+2026-09-21T04:58:35.7834015Z Installer cleanup and registered-uninstaller tests passed.
+2026-09-21T04:59:35.7792787Z Installer lifecycle passed on Arm64.

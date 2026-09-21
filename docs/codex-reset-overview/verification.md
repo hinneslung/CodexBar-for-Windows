@@ -12,6 +12,7 @@ Environment: Windows x64, Swift 6.3.3, repository at `windows/codex-reset-overvi
 | Pinned SwiftFormat 0.61.1 on all seven changed Swift files | Passed, 0/7 need formatting | [swiftformat.log](swiftformat.log) |
 | `make check`, `make test` in WSL | Cannot start: Windows checkout shell shebangs contain CRLF | [make-check.log](make-check.log), [make-test.log](make-test.log) |
 | Offline installer resolver/cleanup and diagnostics tests | Passed under PowerShell 7 | [installer-harness-tests.log](installer-harness-tests.log) |
+| Manual packaging, startup and installer lifecycle, x64 + ARM64 | Passed on `7b172fa25` | [final e2e log](installer-e2e-final.log) |
 
 Clean-checkout CI passed lint, all 190 tests on both Windows x64 and ARM64, and all
 Linux build/test jobs. See [selected CI logs](ci-checks.log). No live provider,
@@ -28,6 +29,12 @@ failed solely because macOS compatibility tests were deferred; all executed jobs
 passed. The PR is ready for review, and the final evidence push triggers a new run
 including those compatibility tests. Final checks are visible on [PR #9's checks
 page](https://github.com/hinneslung/CodexBar-for-Windows/pull/9/checks).
+
+The ready-state run passed all Windows/Linux jobs and lint, then macOS shard 0 found
+two missing provider-specific architecture comments. Both Codex-only inventory gates
+now explain their ownership inline. This is a comment-only correction; behavioral
+test and manual e2e evidence is unchanged. See [architecture diagnostic](ci-architecture.log)
+and the PR checks page for the subsequent complete run.
 
 ## Native smoke
 
@@ -85,5 +92,7 @@ test assumption during reinstall: Inno selected `unins001.exe`, while the test i
 cleanup. The test now resolves the current registered uninstaller, validates its exact
 installation directory/name, and preserves primary failures if cleanup also fails.
 Offline fake-registry tests cover stale/current paths and invalid registrations. The
-manual workflow is repeated for this repair; final run links/results are recorded in
-[PR #9](https://github.com/hinneslung/CodexBar-for-Windows/pull/9).
+manual workflow was repeated for this repair and [passed on both
+architectures](https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35561825143).
+[Selected final log lines](installer-e2e-final.log) capture the test and lifecycle results.
+Final CI run links/results are recorded in [PR #9](https://github.com/hinneslung/CodexBar-for-Windows/pull/9).

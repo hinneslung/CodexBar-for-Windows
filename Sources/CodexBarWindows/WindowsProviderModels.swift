@@ -737,6 +737,7 @@ struct WindowsDashboardPresentation: Equatable, Sendable {
         let resetText = Self.displayText(
             snapshot.resetText ?? windows.first?.resetText,
             fallback: "Reset unavailable")
+        // Provider-specific by design: Only Codex account rows own reset-credit inventory.
         let codexResetCredits: WindowsCodexResetCredits? = if
             profile.id == .codex,
             snapshot.provider == .codex,
