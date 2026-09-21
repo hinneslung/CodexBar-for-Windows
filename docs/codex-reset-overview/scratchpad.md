@@ -102,8 +102,10 @@
   so it runs independently of the source checkout.
 - CUA refused fixture termination on ownership; normal Quit input also failed.
   User was notified. No safeguard bypassed; the local desktop was untouched.
-- Pending at this commit: CI and new manual packaging/installer e2e. Final run URLs
-  and outcomes will be recorded in PR #9 before installer delivery.
+- Final CI and manual packaging/installer e2e passed; updated x64 EXE was delivered.
+  User then authorized merge and release. PR #9 merged as `4096daa82`.
+- Release preparation and packaged VM evidence are recorded in [release.md](release.md).
+  The user closed the earlier fixture; its PID was confirmed absent.
 
 ## Original delivery links
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.56.8-windows.5 — 2026-09-21
+
+- Show each Codex account's available usage resets and nearest expiry in the Windows overview, such as `1 reset (5d)`.
+- Give the overview summary unused space beside the scheduled reset time so the plan, reset count, and credit balance fit.
+- Keep optional malformed reset inventory from interrupting ordinary usage readings.
+- Publish Windows installers, portable packages, and Linux CLI backends; this Windows fork no longer publishes macOS CLI packages.
+
 ## 0.56.8-windows.2 — 2026-09-10
 
 - Track multiple accounts for the same provider with separate profiles, credentials and usage readings.
