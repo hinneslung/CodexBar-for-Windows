@@ -1,0 +1,10 @@
+warning: 'codexbar': dependency 'sparkle' is not used by any target
+warning: 'codexbar': dependency 'commander' is not used by any target
+warning: 'codexbar': dependency 'swift-crypto' is not used by any target
+warning: 'codexbar': dependency 'keyboardshortcuts' is not used by any target
+warning: 'codexbar': dependency 'vortex' is not used by any target
+warning: 'codexbar': dependency 'sweetcookiekit' is not used by any target
+[0/1] Planning build
+Building for debugging...
+[0/3] Write swift-version--3C6C3A12A4DEA587.txt
+Build of product 'CodexBar' complete! (36.10s)

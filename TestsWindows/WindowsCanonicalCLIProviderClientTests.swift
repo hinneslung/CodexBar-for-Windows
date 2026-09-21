@@ -366,6 +366,88 @@ struct WindowsCanonicalCLIProviderClientTests {
         #expect(snapshot.planText == nil)
         #expect(snapshot.balanceText == "991,856 points remaining")
     }
+
+    @Test
+    func `decoder keeps only available reset expiries and ignores the server count`() throws {
+        let future = Date(timeIntervalSince1970: 2_000_000_000)
+        let payload = Self.resetPayload(Self.resetInventory([
+            Self.resetEntry(id: "one", status: "available", expiresAt: Self.iso(future)),
+            Self.resetEntry(id: "two", status: "available", expiresAt: nil),
+            Self.resetEntry(id: "three", status: "redeemed", expiresAt: Self.iso(future)),
+            Self.resetEntry(id: "four", status: "redeeming", expiresAt: Self.iso(future)),
+            Self.resetEntry(id: "five", status: "expired", expiresAt: Self.iso(future)),
+            Self.resetEntry(id: "six", status: "consumed", expiresAt: Self.iso(future)),
+        ]))
+        let snapshot = try WindowsCanonicalCLIProviderClient.decode(
+            data: Data(payload.utf8), requestedProvider: .codex, sourceText: "Ubuntu · OAuth")
+
+        let expiries = try #require(snapshot.codexResetCredits?.availableExpiries)
+        #expect(expiries.count == 2)
+        #expect(expiries.compactMap(\.self) == [future])
+        #expect(expiries.count(where: { $0 == nil }) == 1)
+        #expect(snapshot.usedPercent == 18)
+        #expect(snapshot.planText == "Plan: Pro")
+
+        let row = WindowsDashboardPresentation.makeRow(
+            snapshot: snapshot,
+            profile: WindowsProviderConfiguration(id: .codex, enabled: true, order: 0),
+            distinguishesProfile: false,
+            now: future.addingTimeInterval(-7200))
+        #expect(row.overviewStatusText == "Pro  •  2 resets (2h)")
+        #expect(row.codexResetCredits?.availableExpiries.count == 2)
+    }
+
+    @Test
+    func `missing and malformed reset inventory decode as absent without losing usage`() throws {
+        let badEntry =
+            "{\"id\":\"bad\",\"reset_type\":\"manual\",\"status\":5,\"granted_at\":\"2026-01-01T00:00:00Z\"}"
+        let badDate = Self.resetEntry(id: "bad-date", status: "available", expiresAt: "not-a-date")
+        let good = Self.resetEntry(
+            id: "good", status: "available", expiresAt: Self.iso(Date(timeIntervalSince1970: 2_000_000_000)))
+        let fragments: [String?] = [
+            nil,
+            "null",
+            "\"oops\"",
+            "{\"credits\":\"oops\"}",
+            "{\"credits\":[\(badEntry)]}",
+            "{\"credits\":[\(badDate)]}",
+            "{\"credits\":[\(good),\(badEntry)]}",
+        ]
+        for fragment in fragments {
+            let snapshot = try WindowsCanonicalCLIProviderClient.decode(
+                data: Data(Self.resetPayload(fragment).utf8),
+                requestedProvider: .codex,
+                sourceText: "Ubuntu · OAuth")
+            #expect(snapshot.codexResetCredits == nil)
+            #expect(snapshot.usedPercent == 18)
+            #expect(snapshot.planText == "Plan: Pro")
+        }
+    }
+
+    private static func iso(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.string(from: date)
+    }
+
+    private static func resetEntry(id: String, status: String, expiresAt: String?) -> String {
+        let expiry = expiresAt.map { "\"\($0)\"" } ?? "null"
+        return "{\"id\":\"\(id)\",\"reset_type\":\"manual\",\"status\":\"\(status)\","
+            + "\"granted_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\(expiry)}"
+    }
+
+    private static func resetInventory(_ entries: [String]) -> String {
+        "{\"credits\":[\(entries.joined(separator: ","))],"
+            + "\"availableCount\":99,\"updatedAt\":\"2026-08-24T01:00:00Z\"}"
+    }
+
+    private static func resetPayload(_ inventory: String?) -> String {
+        let fragment = inventory.map { "\"codexResetCredits\":\($0)," } ?? ""
+        return "[{\"provider\":\"codex\",\"source\":\"oauth\","
+            + "\"usage\":{\"primary\":{\"usedPercent\":18},"
+            + "\"identity\":{\"loginMethod\":\"Pro\"},\(fragment)"
+            + "\"updatedAt\":\"2026-08-24T01:00:00Z\"},\"credits\":null,\"error\":null}]"
+    }
 }
 
 private final class CanonicalAuthorityState: @unchecked Sendable {

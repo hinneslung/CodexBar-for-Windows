@@ -491,6 +491,35 @@ struct WindowsNamedProviderProfileTests {
         renamed.codexHome = "/home/person/.codex-personal"
         #expect(WindowsTrayApplication.routingChanged(from: work, to: renamed))
     }
+
+    @Test
+    func `codex reset counts stay isolated between named profiles`() {
+        let work = WindowsProviderConfiguration(id: .codex, profileName: "Work", enabled: true, order: 0)
+        let personalID = WindowsProviderProfileID(rawValue: "reset-personal")
+        let personal = WindowsProviderConfiguration(
+            id: .codex, profileID: personalID, profileName: "Personal", enabled: true, order: 1)
+        let presentation = WindowsDashboardPresentation.make(
+            snapshots: [
+                WindowsProviderSnapshot(
+                    provider: .codex,
+                    availability: .available,
+                    sourceText: "Automatic",
+                    planText: "Plan: Pro",
+                    codexResetCredits: WindowsCodexResetCredits(availableExpiries: [nil])),
+                WindowsProviderSnapshot(
+                    provider: .codex,
+                    profileID: personalID,
+                    profileName: "Personal",
+                    availability: .available,
+                    sourceText: "Automatic",
+                    planText: "Plan: Pro",
+                    codexResetCredits: WindowsCodexResetCredits(availableExpiries: [nil, nil])),
+            ],
+            refreshedAt: Date(),
+            profiles: [work, personal])
+
+        #expect(presentation.rows.map(\.overviewStatusText) == ["Pro  •  1 reset", "Pro  •  2 resets"])
+    }
 }
 
 private final class NamedProfileRunner: @unchecked Sendable {

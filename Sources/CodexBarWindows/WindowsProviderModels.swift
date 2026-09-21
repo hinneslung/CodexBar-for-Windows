@@ -21,6 +21,49 @@ struct WindowsProviderWindowSnapshot: Equatable, Sendable {
     }
 }
 
+struct WindowsCodexResetCredits: Equatable, Sendable {
+    let availableExpiries: [Date?]
+
+    func available(at now: Date) -> Self {
+        Self(availableExpiries: self.availableExpiries.filter { $0.map { $0 > now } ?? true })
+    }
+
+    var count: Int {
+        self.availableExpiries.count
+    }
+
+    var earliestExpiry: Date? {
+        self.availableExpiries.compactMap(\.self).min()
+    }
+
+    func compactText(now: Date) -> String? {
+        guard self.count > 0 else { return nil }
+        let countText = self.count == 1 ? "1 reset" : "\(self.count) resets"
+        guard let earliestExpiry,
+              let expiryText = WindowsResetLabelFormatter.compact(
+                  resetsAt: earliestExpiry,
+                  description: nil,
+                  now: now)
+        else { return countText }
+        return "\(countText) (\(expiryText))"
+    }
+
+    func accessibilityText(now: Date) -> String? {
+        guard self.count > 0 else { return nil }
+        let countText =
+            self.count == 1
+                ? "1 available usage reset"
+                : "\(self.count) available usage resets"
+        guard let earliestExpiry,
+              let expiryText = WindowsResetLabelFormatter.compact(
+                  resetsAt: earliestExpiry,
+                  description: nil,
+                  now: now)
+        else { return countText }
+        return "\(countText), nearest expiry (\(expiryText))"
+    }
+}
+
 /// Display-safe provider data. Adapters must never place credentials, cookies, or raw response bodies in these fields.
 struct WindowsProviderSnapshot: Sendable {
     let provider: WindowsProviderID
@@ -33,6 +76,7 @@ struct WindowsProviderSnapshot: Sendable {
     let source: WindowsProviderSourcePresentation
     let safeErrorText: String?
     let windows: [WindowsProviderWindowSnapshot]
+    let codexResetCredits: WindowsCodexResetCredits?
     let planText: String?
     let balanceText: String?
     let accountText: String?
@@ -59,6 +103,7 @@ struct WindowsProviderSnapshot: Sendable {
             balanceText: self.balanceText,
             accountText: self.accountText,
             updatedAt: self.updatedAt,
+            codexResetCredits: self.codexResetCredits,
             discardsRefreshResult: self.discardsRefreshResult,
             publicationAuthorityCheck: self.publicationAuthorityCheck)
     }
@@ -78,6 +123,7 @@ struct WindowsProviderSnapshot: Sendable {
         balanceText: String? = nil,
         accountText: String? = nil,
         updatedAt: Date? = nil,
+        codexResetCredits: WindowsCodexResetCredits? = nil,
         discardsRefreshResult: Bool = false,
         publicationAuthorityCheck: (@Sendable () throws -> Bool)? = nil)
     {
@@ -91,6 +137,7 @@ struct WindowsProviderSnapshot: Sendable {
         self.source = source
         self.safeErrorText = safeErrorText
         self.windows = windows
+        self.codexResetCredits = codexResetCredits
         self.planText = planText
         self.balanceText = balanceText
         self.accountText = accountText
@@ -115,6 +162,7 @@ struct WindowsProviderSnapshot: Sendable {
             balanceText: self.balanceText,
             accountText: self.accountText,
             updatedAt: self.updatedAt,
+            codexResetCredits: self.codexResetCredits,
             discardsRefreshResult: self.discardsRefreshResult,
             publicationAuthorityCheck: self.publicationAuthorityCheck)
     }
@@ -134,6 +182,7 @@ struct WindowsProviderSnapshot: Sendable {
         balanceText: String? = nil,
         accountText: String? = nil,
         updatedAt: Date? = nil,
+        codexResetCredits: WindowsCodexResetCredits? = nil,
         discardsRefreshResult: Bool = false,
         publicationAuthorityCheck: (@Sendable () throws -> Bool)? = nil)
     {
@@ -152,6 +201,7 @@ struct WindowsProviderSnapshot: Sendable {
             balanceText: balanceText,
             accountText: accountText,
             updatedAt: updatedAt,
+            codexResetCredits: codexResetCredits,
             discardsRefreshResult: discardsRefreshResult,
             publicationAuthorityCheck: publicationAuthorityCheck)
     }
@@ -178,6 +228,7 @@ struct WindowsProviderSnapshot: Sendable {
             balanceText: self.balanceText,
             accountText: self.accountText,
             updatedAt: self.updatedAt,
+            codexResetCredits: self.codexResetCredits,
             discardsRefreshResult: self.discardsRefreshResult,
             publicationAuthorityCheck: check)
     }
@@ -239,6 +290,9 @@ struct WindowsProviderRowPresentation: Equatable, Sendable {
     let balanceText: String
     let accountText: String
     let measuredText: String
+    let codexResetCredits: WindowsCodexResetCredits?
+    let codexResetCreditsText: String
+    let codexResetCreditsAccessibilityText: String
 
     init(
         provider: WindowsProviderID,
@@ -254,7 +308,10 @@ struct WindowsProviderRowPresentation: Equatable, Sendable {
         planText: String,
         balanceText: String,
         accountText: String,
-        measuredText: String)
+        measuredText: String,
+        codexResetCredits: WindowsCodexResetCredits? = nil,
+        codexResetCreditsText: String = "",
+        codexResetCreditsAccessibilityText: String = "")
     {
         self.provider = provider
         self.profileID = profileID ?? .defaultID(for: provider)
@@ -270,6 +327,9 @@ struct WindowsProviderRowPresentation: Equatable, Sendable {
         self.balanceText = balanceText
         self.accountText = accountText
         self.measuredText = measuredText
+        self.codexResetCredits = codexResetCredits
+        self.codexResetCreditsText = codexResetCreditsText
+        self.codexResetCreditsAccessibilityText = codexResetCreditsAccessibilityText
     }
 
     var displayName: String {
@@ -297,6 +357,7 @@ struct WindowsProviderRowPresentation: Equatable, Sendable {
             self.percentText,
             self.resetText,
             self.planText,
+            self.codexResetCreditsAccessibilityText,
             self.balanceText,
             self.accountText,
             self.measuredText,
@@ -316,7 +377,7 @@ struct WindowsProviderRowPresentation: Equatable, Sendable {
             self.governingWindow == nil
                 ? ""
                 : (WindowsProviderBalanceFormatter.compact(self.balanceText) ?? self.balanceText)
-        let context = [plan, balance]
+        let context = [plan, self.codexResetCreditsText, balance]
             .filter { !$0.isEmpty }
             .joined(separator: "  •  ")
         if !context.isEmpty { return context }
@@ -399,9 +460,10 @@ enum WindowsResetLabelFormatter {
 
     static func compact(resetsAt: Date?, description: String?, now: Date = Date()) -> String? {
         if let resetsAt {
-            let seconds = Int(resetsAt.timeIntervalSince(now).rounded(.down))
-            if seconds <= 0 { return "pending" }
-            if seconds < 60 { return "<1m" }
+            let interval = resetsAt.timeIntervalSince(now)
+            if interval <= 0 { return "pending" }
+            if interval < 60 { return "<1m" }
+            let seconds = Int(interval.rounded(.down))
             if seconds < 3600 { return "\(seconds / 60)m" }
             if seconds < 86400 { return "\(seconds / 3600)h" }
             return "\(seconds / 86400)d"
@@ -606,10 +668,11 @@ struct WindowsDashboardPresentation: Equatable, Sendable {
             now: now)
     }
 
-    private static func makeRow(
+    static func makeRow(
         snapshot: WindowsProviderSnapshot?,
         profile: WindowsProviderConfiguration,
-        distinguishesProfile: Bool) -> WindowsProviderRowPresentation
+        distinguishesProfile: Bool,
+        now: Date = Date()) -> WindowsProviderRowPresentation
     {
         guard let snapshot else {
             return WindowsProviderRowPresentation(
@@ -674,6 +737,17 @@ struct WindowsDashboardPresentation: Equatable, Sendable {
         let resetText = Self.displayText(
             snapshot.resetText ?? windows.first?.resetText,
             fallback: "Reset unavailable")
+        let codexResetCredits: WindowsCodexResetCredits? = if
+            profile.id == .codex,
+            snapshot.provider == .codex,
+            snapshot.availability == .available,
+            let credits = snapshot.codexResetCredits
+        {
+            credits.available(at: now)
+        } else {
+            nil
+        }
+        let visibleCodexResetCredits = codexResetCredits.flatMap { $0.count > 0 ? $0 : nil }
         return WindowsProviderRowPresentation(
             provider: profile.id,
             profileID: profile.profileID,
@@ -690,7 +764,10 @@ struct WindowsDashboardPresentation: Equatable, Sendable {
             accountText: Self.displayText(snapshot.accountText, fallback: ""),
             measuredText: snapshot.updatedAt.map {
                 "Measured \(ISO8601DateFormatter().string(from: $0))"
-            } ?? "")
+            } ?? "",
+            codexResetCredits: visibleCodexResetCredits,
+            codexResetCreditsText: visibleCodexResetCredits?.compactText(now: now) ?? "",
+            codexResetCreditsAccessibilityText: visibleCodexResetCredits?.accessibilityText(now: now) ?? "")
     }
 
     private static func normalizedPercent(_ value: Double?) -> Double? {

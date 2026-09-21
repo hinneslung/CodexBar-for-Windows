@@ -512,6 +512,34 @@ struct WindowsProviderSourcePresentationTests {
         #expect(!refreshing.source.isResolved)
     }
 
+    @Test
+    func `cached reset expiries survive stale success retention and refresh overlay`() {
+        let credits = WindowsCodexResetCredits(availableExpiries: [nil])
+        let cached = WindowsProviderSnapshot(
+            provider: .codex,
+            availability: .available,
+            source: .init(distributionLabel: "Ubuntu", kind: .upstream("oauth"), isResolved: true),
+            codexResetCredits: credits)
+        let failed = WindowsProviderSnapshot(
+            provider: .codex,
+            availability: .error,
+            source: .init(distributionLabel: "Debian", kind: .automatic, isResolved: false),
+            safeErrorText: "Usage unavailable")
+
+        #expect(
+            WindowsTrayApplication.snapshotRetainingLastSuccess(failed, cached: cached)
+                .codexResetCredits == credits)
+        #expect(
+            cached.assigningProfile(WindowsProviderConfiguration(id: .codex, enabled: true, order: 0))
+                .codexResetCredits == credits)
+        #expect(cached.requiringPublicationAuthority(nil).codexResetCredits == credits)
+        #expect(
+            WindowsTrayApplication.snapshotForRefreshPresentation(
+                cached,
+                configuration: WindowsProviderConfiguration(id: .codex, enabled: true, order: 0),
+                manualCredentialLabel: nil).codexResetCredits == credits)
+    }
+
     private static func source(
         _ kind: WindowsProviderSourcePresentation.Kind,
         resolved: Bool = false) -> String

@@ -389,7 +389,14 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
             planText: planText.map { "Plan: \($0)" },
             balanceText: balanceText,
             accountText: accountText,
-            updatedAt: updatedAt)
+            updatedAt: updatedAt,
+            codexResetCredits: requestedProvider == .codex ? payload.usage?.codexResetCredits.map {
+                WindowsCodexResetCredits(
+                    availableExpiries: $0.credits.reduce(into: [Date?]()) { expiries, credit in
+                        guard credit.status == "available" else { return }
+                        expiries.append(credit.expiresAt)
+                    })
+            } : nil)
     }
 
     static func decode(
@@ -678,6 +685,50 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
         let extraRateWindows: [NamedRateWindow]?
         let updatedAt: Date?
         let identity: Identity?
+        let codexResetCredits: CodexResetCredits?
+
+        private enum CodingKeys: String, CodingKey {
+            case primary
+            case secondary
+            case tertiary
+            case extraRateWindows
+            case updatedAt
+            case identity
+            case codexResetCredits
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.primary = try container.decodeIfPresent(RateWindow.self, forKey: .primary)
+            self.secondary = try container.decodeIfPresent(RateWindow.self, forKey: .secondary)
+            self.tertiary = try container.decodeIfPresent(RateWindow.self, forKey: .tertiary)
+            self.extraRateWindows = try container.decodeIfPresent(
+                [NamedRateWindow].self,
+                forKey: .extraRateWindows)
+            self.updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
+            self.identity = try container.decodeIfPresent(Identity.self, forKey: .identity)
+            do {
+                self.codexResetCredits = try container.decodeIfPresent(
+                    CodexResetCredits.self,
+                    forKey: .codexResetCredits)
+            } catch {
+                self.codexResetCredits = nil
+            }
+        }
+    }
+
+    private struct CodexResetCredits: Decodable {
+        let credits: [CodexResetCredit]
+    }
+
+    private struct CodexResetCredit: Decodable {
+        let status: String
+        let expiresAt: Date?
+
+        private enum CodingKeys: String, CodingKey {
+            case status
+            case expiresAt = "expires_at"
+        }
     }
 
     private struct RateWindow: Decodable {
