@@ -15,6 +15,8 @@ $smokeExecutable = Join-Path $qaDirectory 'CodexBarResetSmoke.exe'
     (Join-Path $PSScriptRoot 'SmokeMain.swift') -o $smokeExecutable `
     -Xlinker /SUBSYSTEM:WINDOWS -Xlinker /ENTRY:mainCRTStartup -ldwmapi -luxtheme
 if ($LASTEXITCODE -ne 0) { throw 'Offline smoke fixture build failed.' }
+Copy-Item -LiteralPath (Join-Path $appBinaryDirectory 'CodexBar_CodexBarWindows.resources') `
+    -Destination $qaDirectory -Recurse -Force
 # launch_app runs in the interactive desktop daemon; put Swift DLLs beside the fixture executable.
 $runtimeInfo = swiftc -print-target-info | ConvertFrom-Json
 foreach ($runtimePath in $runtimeInfo.paths.runtimeLibraryPaths) {

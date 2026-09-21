@@ -1,0 +1,4 @@
+./Scripts/test.sh
+/usr/bin/env: ‘bash\r’: No such file or directory
+/usr/bin/env: use -[v]S to pass options in shebang lines
+make: *** [Makefile:34: test] Error 127

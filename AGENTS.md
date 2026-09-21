@@ -32,6 +32,7 @@
 - PRs/patches should list summary, commands run, screenshots/GIFs for UI changes, and linked issue/reference when relevant.
 
 ## Agent Notes
+- Windows QA, smoke tests, and visual verification: use the VM at `ssh hinne@192.168.1.150` with CUA, not the local desktop. Build locally or in CI and transfer the artifact to that VM.
 - Use the provided scripts and package manager (SwiftPM); avoid adding dependencies or tooling without confirmation.
 - Menu bar automation: capture the target screen first and verify the CodexBar icon is visibly onscreen. Reject `click-extra` success when coordinates fall outside display bounds; hidden menu extras are not click proof.
 - Validate UI/runtime behavior against the freshly built bundle; restart via the pkill+open command above to avoid running stale binaries.

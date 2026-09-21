@@ -62,9 +62,9 @@ in fresh native screenshots.
 | Empty/multiple | Empty inventory hides; two resets show earliest expiry `(2h)` | [Empty/multiple](../screenshots/codex-reset-overview-empty-multiple.png) |
 | Navigation | Clicking Work opens its real detail screen; Back returns to overview with reset labels intact | [Provider detail](../screenshots/codex-reset-overview-provider-detail.png), [back state](cua-back.json) |
 
-Count and expiry fit on each row. Business plan plus count leaves the trailing credit
-balance ellipsized by the existing layout; the governing usage percentage and quota
-reset time remain intact. No layout change was needed.
+The initial build left the trailing credit balance ellipsized. The user rejected this
+after installation. The [truncation follow-up](truncation-verification.md) supersedes
+that initial acceptance and verifies the corrected allocation on the requested VM.
 
 The original installed CodexBar process was left untouched. CUA's process ownership
 check refused fixture termination, and later taskbar actions did not reliably work.

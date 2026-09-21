@@ -89,7 +89,23 @@
   Independent final diff review found no blockers; PIC agrees after inspecting the diff
   and running both offline scripts. See the appended [review](review-independent.md).
 
-## Delivery links
+## Truncation follow-up (2026-09-21)
+
+- User rejected trailing-balance truncation and directed future GUI QA to the SSH VM.
+- Fattie changed only `drawOverviewRow` (+17/-1); PIC accepts the independent
+  [no-blocker review](review-truncation.md). Actual reset-label measurement reclaims
+  unused space while preserving the existing maximum reset width and fallback.
+- Formatter completed; native warnings-as-errors test build and all 190 tests passed.
+- Fresh offline fixture ran on `g4-vmware-win11` through CUA 0.28.1 at 100% scaling.
+  Full reported text, longer reset date, provider detail, and Back passed. See
+  [VM evidence](truncation-verification.md). The fixture bundle now includes resources
+  so it runs independently of the source checkout.
+- CUA refused fixture termination on ownership; normal Quit input also failed.
+  User was notified. No safeguard bypassed; the local desktop was untouched.
+- Pending at this commit: CI and new manual packaging/installer e2e. Final run URLs
+  and outcomes will be recorded in PR #9 before installer delivery.
+
+## Original delivery links
 
 - [PR #9](https://github.com/hinneslung/CodexBar-for-Windows/pull/9), targeting `windows-native-app`.
 - [Code validation CI](https://github.com/hinneslung/CodexBar-for-Windows/actions/runs/35559278837).

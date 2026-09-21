@@ -24,3 +24,7 @@
    unless separately authorized.
 10. Keep the scratchpad current with assignments, decisions, outcomes, and next steps.
     Preserve the original plan; record scope clarifications separately.
+11. Per the user's follow-up, run future QA, smoke tests, and visual verification on
+    the Windows VM at `ssh hinne@192.168.1.150` using CUA. Compile/package locally or
+    in CI as appropriate, then transfer the tested build to the VM. Do not use the
+    user's local desktop for subsequent GUI QA.
