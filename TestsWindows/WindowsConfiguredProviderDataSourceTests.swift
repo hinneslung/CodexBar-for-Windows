@@ -356,6 +356,40 @@ struct WindowsConfiguredProviderDataSourceTests {
     }
 
     @Test
+    func `a provider removed upstream is never sent to the CLI`() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "codexbar-removed-upstream-\(Foundation.UUID().uuidString)",
+            isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = WindowsConfigurationStore(fileURL: root.appendingPathComponent("config.json"))
+        try store.save(
+            WindowsAppConfiguration(providers: [
+                WindowsProviderConfiguration(id: .crof, enabled: true, order: 0),
+            ]))
+        let capture = SequencedInvocationCapture(responses: [])
+        let dataSource = WindowsConfiguredProviderDataSource(
+            store: store,
+            environment: ["WINDIR": "C:\\Windows"],
+            wslDistributions: ["Ubuntu"],
+            cliDiscoveryCache: WindowsCanonicalCLIDiscoveryCache(
+                resolver: { _, _ in "/usr/local/bin/codexbar" }),
+            bundledCLIDiscoveryCache: WindowsCanonicalCLIDiscoveryCache(
+                resolver: { _, _ in "/opt/codexbar/CodexBarCLI" }),
+            cliClient: WindowsCanonicalCLIProviderClient(
+                processRunner: { _, arguments, timeout, _, _, _ in
+                    capture.record(arguments: arguments, timeout: timeout)
+                },
+                retryDelay: {}),
+            credentialVault: nil)
+
+        let snapshots = await dataSource.fetchProviderSnapshots()
+
+        #expect(snapshots.allSatisfy { $0.provider != .crof })
+        #expect(capture.calls.isEmpty)
+        #expect(try store.load().providers.first { $0.id == .crof }?.enabled == false)
+    }
+
+    @Test
     func `only Claude prefers a faster automatic source`() {
         #expect(WindowsConfiguredProviderDataSource.automaticPreferredSource(for: .claude) == "oauth")
         #expect(WindowsConfiguredProviderDataSource.automaticPreferredSource(for: .codex) == nil)

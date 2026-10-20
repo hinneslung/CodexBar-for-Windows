@@ -39,7 +39,18 @@ final class WindowsAppConfigurationTests: XCTestCase {
             Set(WindowsProviderID.supportedProviders),
             Set(WindowsProviderCatalog.entries.map(\.id))
                 .subtracting(WindowsProviderConfigurationCatalog.unavailableProviderIDs))
-        XCTAssertEqual(WindowsProviderID.supportedProviders.count, 65)
+        XCTAssertEqual(WindowsProviderID.supportedProviders.count, 64)
+    }
+
+    func test_mergingDisablesProfilesOfUnavailableProviders() {
+        let merged = WindowsAppConfiguration(providers: [
+            WindowsProviderConfiguration(id: .codex, enabled: true, order: 0),
+            WindowsProviderConfiguration(id: .crof, enabled: true, order: 1),
+        ]).mergingCatalogDefaults()
+
+        XCTAssertEqual(merged.providers.first { $0.id == .codex }?.enabled, true)
+        XCTAssertEqual(merged.providers.first { $0.id == .crof }?.enabled, false)
+        XCTAssertTrue(merged.providers.contains { $0.id == .crof })
     }
 
     func test_defaultsEnableOnlyCodexAndClaude() {

@@ -100,7 +100,7 @@ struct WindowsProviderCredentialBridgeTests {
     @Test
     func `all declarative mappings use unique CodexBar provider IDs`() {
         let rules = WindowsProviderCredentialBridge.defaultRules
-        #expect(rules.count == 20)
+        #expect(rules.count == 19)
         #expect(Set(rules.map(\.provider)).count == rules.count)
     }
 
@@ -111,7 +111,6 @@ struct WindowsProviderCredentialBridgeTests {
             (.alibaba, "alibaba-coding-plan", "ALIBABA_CODING_PLAN_API_KEY"),
             (.chutes, "chutes", "CHUTES_API_KEY"),
             (.clinePass, "cline-pass", "CLINE_API_KEY"),
-            (.crof, "crof", "CROF_API_KEY"),
             (.deepInfra, "deepinfra", "DEEPINFRA_API_KEY"),
             (.deepSeek, "deepseek", "DEEPSEEK_API_KEY"),
             (.fireworks, "fireworks-ai", "FIREWORKS_API_KEY"),

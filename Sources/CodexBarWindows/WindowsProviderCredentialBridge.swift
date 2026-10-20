@@ -129,7 +129,6 @@ struct WindowsProviderCredentialBridge: Sendable {
         .init(provider: .chutes, candidates: [.init("chutes", secretEnvironmentKey: "CHUTES_API_KEY")]),
         .init(
             provider: .clinePass, candidates: [.init("cline-pass", secretEnvironmentKey: "CLINE_API_KEY")]),
-        .init(provider: .crof, candidates: [.init("crof", secretEnvironmentKey: "CROF_API_KEY")]),
         .init(
             provider: .deepInfra,
             candidates: [.init("deepinfra", secretEnvironmentKey: "DEEPINFRA_API_KEY")]),

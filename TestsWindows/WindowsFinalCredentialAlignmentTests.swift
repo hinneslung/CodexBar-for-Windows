@@ -14,7 +14,7 @@ struct WindowsFinalCredentialAlignmentTests {
     func `catalog method counts and aligned provider copy are exact`() throws {
         let schemas = WindowsProviderConfigurationCatalog.schemas
         let manualSets = schemas.flatMap(\.manualCredentialSets)
-        #expect(manualSets.count(where: { $0.id == "api-key" }) == 39)
+        #expect(manualSets.count(where: { $0.id == "api-key" }) == 38)
         #expect(manualSets.count(where: { $0.label == "Browser session" }) == 19)
         #expect(manualSets.count(where: { $0.label == "Session token" }) == 1)
 

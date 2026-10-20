@@ -141,6 +141,14 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
 
     // swiftlint:disable:next function_body_length
     private func fetch(_ provider: WindowsProviderConfiguration) async -> WindowsProviderSnapshot {
+        // Never ask the CLI for a provider it cannot serve, such as one removed upstream.
+        if let unavailable = WindowsProviderConfigurationCatalog.unavailableInfo(for: provider.id) {
+            return WindowsProviderSnapshot(
+                provider: provider.id,
+                availability: .unavailable,
+                source: .configuredFallback(configuration: provider),
+                safeErrorText: unavailable.explanation)
+        }
         let credentialRoute = self.credentialRouteResolver.resolve(provider)
         let configuredSource = WindowsProviderSourcePresentation.configuredFallback(
             configuration: provider,

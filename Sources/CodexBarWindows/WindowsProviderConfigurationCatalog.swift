@@ -177,6 +177,15 @@ struct WindowsProviderConfigurationSchema: Sendable, Equatable {
 struct WindowsUnavailableProviderInfo: Sendable, Equatable {
     let explanation: String
     let resourceURL: String?
+    /// The upstream CLI no longer knows this provider. Its catalog entry stays so existing configurations,
+    /// ordering and logo cells remain stable, but it is never fetched.
+    let removedUpstream: Bool
+
+    init(explanation: String, resourceURL: String?, removedUpstream: Bool = false) {
+        self.explanation = explanation
+        self.resourceURL = resourceURL
+        self.removedUpstream = removedUpstream
+    }
 }
 
 /// Declarative Windows-owned manual credential catalog. It mirrors only configuration fields and
@@ -252,7 +261,7 @@ enum WindowsProviderConfigurationCatalog {
         // Provider-specific by design: Declare proven manual routes and unsupported-platform explanations for the
         // unchanged Linux CLI.
         .aiAnd, .alibaba, .amp, .azureOpenAI, .chutes, .claude, .codebuff, .copilot,
-        .crof, .deepgram, .deepInfra, .doubao, .elevenLabs, .factory, .fireworks, .groq, .ibmBob,
+        .deepgram, .deepInfra, .doubao, .elevenLabs, .factory, .fireworks, .groq, .ibmBob,
         .kilo, .kimi, .liteLLM, .llmProxy, .moonshot, .neuralwatt, .ollama, .openai,
         .openCodeGo, .openRouter, .poe, .sub2API, .synthetic, .venice, .warp, .xAI,
         .zai, .zenMux, .clawRouter, .clinePass, .deepSeek, .minimax,
@@ -262,6 +271,10 @@ enum WindowsProviderConfigurationCatalog {
         .abacus: .init(
             explanation: "The upstream Abacus integration is currently available only on macOS.",
             resourceURL: "https://github.com/steipete/CodexBar/blob/main/docs/abacus.md"),
+        .crof: .init(
+            explanation: "Crof was removed from CodexBar after the service shut down.",
+            resourceURL: "https://github.com/steipete/CodexBar/pull/3828",
+            removedUpstream: true),
         .devin: .init(
             explanation: "The unchanged Linux CLI has no safe configuration route for Devin credentials.",
             resourceURL: "https://github.com/steipete/CodexBar/blob/main/docs/devin.md"),
@@ -441,7 +454,6 @@ enum WindowsProviderConfigurationCatalog {
                     hosts: ["commandcode.ai", "www.commandcode.ai", "api.commandcode.ai"],
                     requiredCookieNames: Self.commandCodeCookieNames),
             ]),
-        Self.apiSchema(.crof, "crof"),
         Self.apiSchema(
             .cursor,
             "cursor",

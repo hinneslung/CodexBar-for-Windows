@@ -278,7 +278,7 @@ struct WindowsProviderSourcePresentationTests {
 
     @Test
     func `unavailable provider metadata is the single configuration gate`() throws {
-        let expected: Set<WindowsProviderID> = [.abacus, .devin, .windsurf, .zed]
+        let expected: Set<WindowsProviderID> = [.abacus, .crof, .devin, .windsurf, .zed]
         #expect(WindowsProviderConfigurationCatalog.unavailableProviderIDs == expected)
         #expect(Set(WindowsProviderConfigurationCatalog.unavailableProviders.keys) == expected)
 

@@ -323,6 +323,14 @@ struct WindowsAppConfiguration: Codable, Equatable, Sendable, CustomStringConver
             result.providers.append(.init(id: entry.id, enabled: false, order: nextOrder))
             nextOrder += 1
         }
+        // Settings cannot toggle unavailable providers, so a profile enabled before its provider became
+        // unavailable (for example, one removed upstream) would otherwise stay enabled and never refresh.
+        for index in result.providers.indices
+            where result.providers[index].enabled
+            && WindowsProviderConfigurationCatalog.unavailableInfo(for: result.providers[index].id) != nil
+        {
+            result.providers[index].enabled = false
+        }
 
         result.providers =
             shouldAlphabetizeDisabledProviders

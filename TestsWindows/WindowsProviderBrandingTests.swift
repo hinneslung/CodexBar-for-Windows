@@ -17,6 +17,9 @@ struct WindowsProviderBrandingTests {
             let reference = WindowsProviderBranding.logo(for: entry.id)
             #expect(reference.atlasIndex == index)
             #expect(!reference.usesFallback)
+            // Providers removed upstream keep their existing atlas artwork; upstream deleted the source SVG.
+            guard WindowsProviderConfigurationCatalog.unavailableInfo(for: entry.id)?.removedUpstream != true
+            else { continue }
             #expect(
                 FileManager.default.fileExists(
                     atPath:
