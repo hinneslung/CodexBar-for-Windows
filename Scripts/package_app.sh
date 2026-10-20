@@ -13,6 +13,51 @@ resolve_package_signing_mode() {
   SIGNING_MODE="$requested"
 }
 
+resolve_package_signing_identity() {
+  if [[ "$SIGNING_MODE" == "adhoc" ]]; then
+    APP_TEAM_ID="${APP_TEAM_ID:-Y5PE65HELJ}"
+    return
+  fi
+
+  local requested="${APP_IDENTITY:-Developer ID Application: Peter Steinberger (Y5PE65HELJ)}"
+  local identities line name hash selected_name="" selected_hash="" matches=0
+  if ! identities=$(security find-identity -p codesigning -v); then
+    echo "ERROR: Unable to list valid code-signing identities." >&2
+    return 1
+  fi
+  local identity_pattern='^[[:space:]]*[[:digit:]]+\)[[:space:]]+([[:xdigit:]]{40})[[:space:]]+"([^"]+)"[[:space:]]*$'
+  local requested_hash
+  requested_hash=$(printf '%s' "$requested" | tr '[:lower:]' '[:upper:]')
+  while IFS= read -r line; do
+    [[ "$line" =~ $identity_pattern ]] || continue
+    hash="${BASH_REMATCH[1]}"
+    name="${BASH_REMATCH[2]}"
+    if [[ "$hash" == "$requested_hash" || "$name" == *"$requested"* ]]; then
+      selected_name="$name"
+      selected_hash="$hash"
+      matches=$((matches + 1))
+    fi
+  done <<<"$identities"
+  if [[ "$matches" != "1" ]]; then
+    echo "ERROR: APP_IDENTITY must match exactly one valid identity (found $matches); use its full name or SHA-1 hash." >&2
+    return 1
+  fi
+  # Developer ID names end in the Team ID; development names may end in a personal ID instead.
+  local team_pattern='^Developer ID Application: .+ \(([A-Z0-9]{10})\)$'
+  if [[ ! "$selected_name" =~ $team_pattern ]]; then
+    echo "ERROR: Cannot derive a Team ID from APP_IDENTITY; use a Developer ID Application identity." >&2
+    return 1
+  fi
+  local team="${BASH_REMATCH[1]}"
+  if [[ -n "${APP_TEAM_ID:-}" && "$APP_TEAM_ID" != "$team" ]]; then
+    echo "ERROR: APP_TEAM_ID does not match the selected signing identity." >&2
+    return 1
+  fi
+  APP_TEAM_ID="$team"
+  # Sign with the same certificate whose team authorized the entitlement selection.
+  CODESIGN_ID="$selected_hash"
+}
+
 verify_no_quarantine_attribute() {
   local bundle="$1"
   local quarantined
@@ -51,6 +96,12 @@ esac
 source "$ROOT/version.env"
 source "$ROOT/Scripts/package_product_paths.sh"
 source "$ROOT/Scripts/sparkle_signing_paths.sh"
+
+# SwiftBuild can record the deployment target as the SDK, enabling legacy native UI.
+CODEXBAR_MACOS_SDK_PATH=$(xcrun --sdk macosx --show-sdk-path)
+SDK_VERSION=$(xcrun --sdk macosx --show-sdk-version)
+BUILD_ARGS=(--sdk "$CODEXBAR_MACOS_SDK_PATH"
+  -Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker "$SDK_VERSION")
 
 # Clean build only when explicitly requested (slower).
 if [[ "${CODEXBAR_FORCE_CLEAN:-0}" == "1" ]]; then
@@ -143,7 +194,7 @@ PY
 
 KEYBOARD_SHORTCUTS_UTIL="$ROOT/.build/checkouts/KeyboardShortcuts/Sources/KeyboardShortcuts/Utilities.swift"
 if [[ ! -f "$KEYBOARD_SHORTCUTS_UTIL" ]]; then
-  swift build -c "$CONF" --arch "${ARCH_LIST[0]}"
+  swift build "${BUILD_ARGS[@]}" -c "$CONF" --arch "${ARCH_LIST[0]}"
 fi
 patch_keyboard_shortcuts
 
@@ -190,6 +241,14 @@ stage_build_products() {
       echo "ERROR: ${product} does not contain required architecture: ${arch}" >&2
       return 1
     fi
+    if ! otool -arch "$arch" -l "$product" | awk -v sdk="$SDK_VERSION" '
+      $1 == "cmd" { build = ($2 == "LC_BUILD_VERSION") }
+      build && $1 == "minos" { minimum = ($2 == "14.0") }
+      build && $1 == "sdk" { valid = (minimum && $2 == sdk) }
+      END { exit !valid }'; then
+      echo "ERROR: Expected macOS 14.0 / SDK ${SDK_VERSION} for ${product} (${arch})." >&2
+      return 1
+    fi
     cp "$product" "$stage_dir/$name"
   done
   if [[ -d "$bin_dir/CodexBar.dSYM" ]]; then
@@ -198,7 +257,7 @@ stage_build_products() {
 }
 
 for ARCH in "${ARCH_LIST[@]}"; do
-  swift build -c "$CONF" --arch "$ARCH"
+  swift build "${BUILD_ARGS[@]}" -c "$CONF" --arch "$ARCH"
   stage_build_products "$ARCH"
 done
 
@@ -229,7 +288,7 @@ if [[ "$SIGNING_MODE" == "adhoc" ]]; then
   AUTO_CHECKS=false
 fi
 WIDGET_BUNDLE_ID="${BUNDLE_ID}.widget"
-APP_TEAM_ID="${APP_TEAM_ID:-Y5PE65HELJ}"
+resolve_package_signing_identity
 APP_GROUP_ID="${APP_TEAM_ID}.${BUNDLE_ID}"
 ENTITLEMENTS_DIR="$ROOT/.build/entitlements"
 APP_ENTITLEMENTS="${ENTITLEMENTS_DIR}/CodexBar.entitlements"
@@ -525,7 +584,6 @@ elif [[ "$ALLOW_LLDB" == "1" ]]; then
   CODESIGN_ID="-"
   CODESIGN_ARGS=(--force --sign "$CODESIGN_ID")
 else
-  CODESIGN_ID="${APP_IDENTITY:-Developer ID Application: Peter Steinberger (Y5PE65HELJ)}"
   CODESIGN_ARGS=(--force --timestamp --options runtime --sign "$CODESIGN_ID")
 fi
 function resign() { codesign "${CODESIGN_ARGS[@]}" "$1"; }

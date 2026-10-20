@@ -1,34 +1,51 @@
 import CodexBarCore
 
 extension StatusItemController {
+    nonisolated static func pluginSwitcherMetricPercent(snapshot: UsageSnapshot?, showUsed: Bool) -> Double? {
+        let windows = ([snapshot?.primary, snapshot?.secondary, snapshot?.tertiary].compactMap(\.self) +
+            (snapshot?.extraRateWindows ?? []).filter(\.usageKnown).map(\.window))
+            .filter(\.usedPercent.isFinite)
+        let weekly = windows.filter { $0.windowMinutes == 7 * 24 * 60 }
+            .max { $0.usedPercent < $1.usedPercent }
+        guard let window = weekly ?? windows.first else { return nil }
+        let used = min(100, max(0, window.usedPercent))
+        return showUsed ? used : 100 - used
+    }
+
     nonisolated static func switcherWeeklyMetricPercent(
         for provider: UsageProvider,
         snapshot: UsageSnapshot?,
         showUsed: Bool,
         preference: MenuBarMetricPreference = .automatic) -> Double?
     {
-        let window: RateWindow? = if preference == .monthlyPlan {
-            MenuBarMetricWindowResolver.rateWindow(
+        let metric = preference == .automatic || preference == .monthlyPlan
+            ? MenuBarMetricWindowResolver.rateWindow(
                 preference: preference,
                 provider: provider,
                 snapshot: snapshot,
                 supportsAverage: false)
+            : nil
+        let presentation = ProviderDescriptorRegistry.descriptor(for: provider).presentation
+        let window: RateWindow? = if preference == .monthlyPlan {
+            metric
         } else if provider == .mistral {
             nil
         } else if preference == .automatic,
-                  MenuBarMetricWindowResolver.automaticSelectionPrioritizesExhaustedWindow(for: provider),
-                  let automatic = MenuBarMetricWindowResolver.rateWindow(
-                      preference: .automatic,
-                      provider: provider,
-                      snapshot: snapshot,
-                      supportsAverage: false),
-                  automatic.usedPercent >= 100
+                  let metric,
+                  presentation.switcherUsesAutomaticMenuBarWindow
+                  || (presentation.automaticSelectionPrioritizesExhaustedWindow && metric.usedPercent >= 100)
         {
-            automatic
+            metric
         } else {
             snapshot?.switcherWeeklyWindow(for: provider, showUsed: showUsed)
         }
-        guard let window else { return nil }
-        return showUsed ? window.usedPercent : window.remainingPercent
+        if let window {
+            return showUsed ? window.usedPercent : window.remainingPercent
+        }
+        guard preference == .automatic,
+              let snapshot,
+              let usedPercent = presentation.fallbackSwitcherUsedPercent(snapshot: snapshot),
+              usedPercent.isFinite else { return nil }
+        return showUsed ? usedPercent : max(0, 100 - usedPercent)
     }
 }

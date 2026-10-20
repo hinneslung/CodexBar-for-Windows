@@ -11,6 +11,21 @@ import Testing
 @MainActor
 struct ClaudeSwapMenuBarSnapshotTests {
     @Test
+    func `swap presentation keeps combined costs despite a saved token account mapping`() {
+        let store = Self.makeUsageStore(suite: "ClaudeSwapMenuBarSnapshotTests-cost-scope")
+        store.settings.claudeSwapEnabled = true
+        store.settings.addTokenAccount(
+            provider: .claude,
+            label: "Personal",
+            token: "fixture",
+            claudeConfigDirectory: "/fixtures/claude-personal")
+        #expect(store.claudeTokenCostConfigDirectory == "/fixtures/claude-personal")
+        store.claudeSwapAccountSnapshots = Self.swapAccounts(count: 2, activeNumber: 1)
+        #expect(store.claudeTokenCostConfigDirectory == nil)
+        #expect(store.tokenCostScope(for: .claude).signature == "claude")
+    }
+
+    @Test
     func `two swap accounts drive the menu bar from the active account snapshot`() throws {
         let store = Self.makeUsageStore(suite: "ClaudeSwapMenuBarSnapshotTests-two")
         store.claudeSwapAccountSnapshots = Self.swapAccounts(count: 2, activeNumber: 1)
@@ -80,6 +95,42 @@ struct ClaudeSwapMenuBarSnapshotTests {
             now: Self.now)
         store._setSnapshotForTesting(Self.ambientSnapshot(usedPercent: 55), provider: .claude)
 
+        let snapshot = try #require(store.menuBarSnapshot(for: UsageProvider.claude.instanceID))
+        #expect(snapshot.primary?.usedPercent == 55)
+    }
+
+    /// The account card shows last-known bars and states their age; the bar icon
+    /// has no age affordance and `isStale` tracks provider errors rather than
+    /// measurement age, so last-known data must not reach it.
+    @Test
+    func `active account with only last known usage still falls back on the bar`() throws {
+        let store = Self.makeUsageStore(suite: "ClaudeSwapMenuBarSnapshotTests-lastknown")
+        var rows = Self.swapRows(count: 2, activeNumber: 1)
+        rows[0] = ClaudeSwapAccountRow(
+            number: 1,
+            email: "active@example.com",
+            isActive: true,
+            usageStatus: .tokenExpired,
+            fiveHour: nil,
+            sevenDay: nil,
+            scoped: [],
+            lastGoodUsage: ClaudeSwapLastGoodUsage(
+                measurement: ClaudeSwapUsageMeasurement(
+                    fiveHour: ClaudeSwapUsageWindow(usedPercent: 71, resetsAt: nil),
+                    sevenDay: nil),
+                fetchedAt: Self.now.addingTimeInterval(-3600)))
+        store.claudeSwapAccountSnapshots = ClaudeSwapAccountProjection.accountSnapshots(
+            from: ClaudeSwapAccountList(activeAccountNumber: 1, accounts: rows),
+            now: Self.now)
+        store._setSnapshotForTesting(Self.ambientSnapshot(usedPercent: 55), provider: .claude)
+
+        // The card keeps the last known measurement...
+        let activeAccount = store.claudeSwapAccountSnapshots.first(where: \.isActive)
+        let active = try #require(activeAccount)
+        #expect(active.usesLastKnownUsage)
+        #expect(active.snapshot?.primary?.usedPercent == 71)
+
+        // ...while the bar icon still renders the ambient snapshot.
         let snapshot = try #require(store.menuBarSnapshot(for: UsageProvider.claude.instanceID))
         #expect(snapshot.primary?.usedPercent == 55)
     }

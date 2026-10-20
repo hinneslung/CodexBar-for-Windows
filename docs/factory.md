@@ -29,8 +29,12 @@ Fetch attempts run in this exact order:
 5) **Local storage WorkOS tokens** (Safari + Chrome/Chromium/Arc leveldb).
 6) **Browser cookies (Safari only)** for Factory domains.
 7) **WorkOS cookies (Safari)** to mint tokens.
-8) **Browser cookies (Chrome, Firefox)** for Factory domains.
-9) **WorkOS cookies (Chrome, Firefox)** to mint tokens.
+8) **Browser cookies (remaining shared-catalog browsers, including Firefox channels)** for Factory domains.
+9) **WorkOS cookies (remaining shared-catalog browsers, including Firefox channels)** to mint tokens.
+
+Firefox Beta, Developer Edition, and Nightly retain separate profile classification. An unavailable or
+unmatched browser store is skipped; the first validated session stops traversal. Existing stored
+sessions remain ahead of browser imports. Background and settings refreshes remain noninteractive.
 
 If a step succeeds, we cache cookies/tokens back into the session store.
 
@@ -125,6 +129,8 @@ Endpoints:
   - `workos:refresh-token` (required)
   - `workos:access-token` (optional)
   - Organization ID parsed from JWT when available.
+- Firefox localStorage is not supported. Firefox cookie import cannot recover a WorkOS refresh token stored only in
+  localStorage; use a Factory API key or a supported browser session in that case.
 
 ## Session storage
 - File: `~/Library/Application Support/CodexBar/factory-session.json`

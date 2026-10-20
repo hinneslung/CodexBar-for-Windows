@@ -9,12 +9,22 @@ extension AntigravityLocalReader {
     static func readDatabases(_ paths: [URL], budget: Budget) throws -> SourceResult {
         var result = SourceResult()
         for url in paths {
-            try budget.check()
-            budget.statistics.files += 1
-            guard budget.statistics.files <= budget.limits.databases else { throw ScanFailure.exhausted }
-            let source = try self.readDatabase(url, budget: budget)
-            result.events.append(contentsOf: source.events)
-            result.isComplete = result.isComplete && source.isComplete
+            do {
+                try budget.check()
+                budget.statistics.files += 1
+                guard budget.statistics.files <= budget.limits.databases else { throw ScanFailure.exhausted }
+                budget.beginDatabase()
+                let source = try self.readDatabase(url, budget: budget)
+                result.events.append(contentsOf: source.events)
+                result.isComplete = result.isComplete && source.isComplete
+                result.containsHistorySource = result.containsHistorySource || source.containsHistorySource
+                result.evidenceIsUnstable = result.evidenceIsUnstable || source.evidenceIsUnstable
+            } catch ScanFailure.schemaExhausted {
+                // Schema limits apply to each database, so an oversized schema costs only its own database.
+                // Rows from the other databases stay valid partial history. Hard row, byte, and duration
+                // limits are not caught here and continue to withhold newly truncated reports as documented.
+                result.isComplete = false
+            }
         }
         return result
     }
@@ -51,18 +61,112 @@ extension AntigravityLocalReader {
     }
     #endif
 
+    private enum OpenMode {
+        /// Ordinary read-only access with WAL read-mark coordination through the sidecars.
+        case readOnly
+        /// Lock-free access to the main database file alone. Never creates or touches sidecars.
+        case immutable
+    }
+
+    private struct DatabaseAttempt {
+        let source: SourceResult
+        /// SQLite declined the database itself (SQLITE_CANTOPEN) before any row was read.
+        let cannotOpen: Bool
+
+        init(_ source: SourceResult, cannotOpen: Bool = false) {
+            self.source = source
+            self.cannotOpen = cannotOpen
+        }
+    }
+
     private static func readDatabase(_ url: URL, budget: Budget) throws -> SourceResult {
-        #if canImport(SQLite3) || canImport(CSQLite3)
+        let attempt = try self.readDatabase(url, budget: budget, mode: .readOnly)
+        // Some SQLite builds (Apple's system library among them) decline read-only access to a WAL database
+        // whose -wal and -shm sidecars are absent, because a read-only connection may not create them.
+        // A cleanly closed conversation is exactly that file. An absent -wal also means no WAL connection
+        // holds the database, so the main file alone carries the checkpointed state.
+        guard attempt.cannotOpen, let before = self.idleDatabaseState(url) else { return attempt.source }
+        budget.statistics.immutableFallbacks += 1
+        var source = try self.readDatabase(url, budget: budget, mode: .immutable).source
+        // An immutable connection neither locks nor detects changes. A writer that appeared during the read
+        // could have checkpointed pages into the main file, so the result is trusted only when the file and
+        // its sidecar state are unchanged afterwards. Anything else stays incomplete, as before.
+        guard self.idleDatabaseState(url) == before else {
+            source.isComplete = false
+            source.evidenceIsUnstable = true
+            return source
+        }
+        return source
+    }
+
+    /// Identity of an idle WAL database: no `-wal` sidecar, plus the main file's size, modification time,
+    /// file system number, and 100-byte header. Nil when a `-wal` sidecar exists or the file cannot be examined.
+    private struct IdleDatabaseState: Equatable {
+        let size: UInt64
+        let modified: Date
+        let fileNumber: UInt64
+        let header: Data
+    }
+
+    private static func idleDatabaseState(_ url: URL) -> IdleDatabaseState? {
+        // SQLite places sidecars next to the resolved database file, not next to a symlink.
+        let resolved = url.resolvingSymlinksInPath()
+        guard !FileManager.default.fileExists(atPath: resolved.path + "-wal"),
+              let attributes = try? FileManager.default.attributesOfItem(atPath: resolved.path),
+              let size = (attributes[.size] as? NSNumber)?.uint64Value,
+              let modified = attributes[.modificationDate] as? Date,
+              let fileNumber = (attributes[.systemFileNumber] as? NSNumber)?.uint64Value,
+              let handle = try? FileHandle(forReadingFrom: resolved)
+        else { return nil }
+        defer { try? handle.close() }
+        guard let header = try? handle.read(upToCount: 100) else { return nil }
+        return IdleDatabaseState(size: size, modified: modified, fileNumber: fileNumber, header: header)
+    }
+
+    /// The `immutable=1` query parameter is only reachable through a URI filename.
+    private static func immutableURI(for url: URL) -> String? {
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove(charactersIn: "%?#")
+        guard let path = url.path.addingPercentEncoding(withAllowedCharacters: allowed) else { return nil }
+        return "file:\(path)?immutable=1"
+    }
+
+    #if canImport(SQLite3) || canImport(CSQLite3)
+    /// Opens the database for the given mode. A failed open leaves no handle behind.
+    private static func openDatabase(
+        _ url: URL,
+        mode: OpenMode,
+        budget: Budget) -> (status: Int32, database: OpaquePointer?)
+    {
         var database: OpaquePointer?
-        let opened = sqlite3_open_v2(url.path, &database, SQLITE_OPEN_READONLY, nil)
+        let status: Int32 = switch mode {
+        case .readOnly:
+            sqlite3_open_v2(url.path, &database, SQLITE_OPEN_READONLY, nil)
+        case .immutable:
+            if let uri = self.immutableURI(for: url) {
+                sqlite3_open_v2(uri, &database, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nil)
+            } else {
+                SQLITE_CANTOPEN
+            }
+        }
         if database != nil {
             budget.statistics.sqliteHandlesOpened += 1
         }
-        guard opened == SQLITE_OK, let database else {
+        guard status == SQLITE_OK, let database else {
             if let database, sqlite3_close(database) == SQLITE_OK {
                 budget.statistics.sqliteHandlesClosed += 1
             }
-            return SourceResult(isComplete: false)
+            return (status, nil)
+        }
+        return (status, database)
+    }
+    #endif
+
+    private static func readDatabase(_ url: URL, budget: Budget, mode: OpenMode) throws -> DatabaseAttempt {
+        #if canImport(SQLite3) || canImport(CSQLite3)
+        let opened = self.openDatabase(url, mode: mode, budget: budget)
+        guard let database = opened.database else {
+            return DatabaseAttempt(SourceResult(isComplete: false), cannotOpen: opened.status == SQLITE_CANTOPEN)
         }
         defer {
             if sqlite3_close(database) == SQLITE_OK {
@@ -87,7 +191,7 @@ extension AntigravityLocalReader {
             nil,
             nil,
             nil)
-        guard registered == SQLITE_OK else { return SourceResult(isComplete: false) }
+        guard registered == SQLITE_OK else { return DatabaseAttempt(SourceResult(isComplete: false)) }
         sqlite3_progress_handler(
             database,
             1000,
@@ -103,17 +207,33 @@ extension AntigravityLocalReader {
             }
         }
         // Ordinary read-only SQLite permits WAL read-mark coordination; it does not promise unchanged SHM bytes.
-        guard sqlite3_exec(database, "BEGIN DEFERRED", nil, nil, nil) == SQLITE_OK else {
+        let began = sqlite3_exec(database, "BEGIN DEFERRED", nil, nil, nil)
+        guard began == SQLITE_OK else {
             if let failure = progress.failure {
                 throw failure
             }
-            return SourceResult(isComplete: false)
+            return DatabaseAttempt(SourceResult(isComplete: false), cannotOpen: began == SQLITE_CANTOPEN)
         }
-        let supported = try self.hasSupportedSQLiteTable(database, budget: budget)
+        let support = try self.inspectSQLiteTableSupport(database, budget: budget)
         if let failure = progress.failure {
             throw failure
         }
-        guard supported else { return SourceResult(isComplete: false) }
+        switch support {
+        case .supported:
+            break
+        case .foreign:
+            // A database in a declared root that describes its own tables and no gen_metadata table is not
+            // Antigravity history. Skipping it costs no coverage. A gen_metadata table with unknown columns
+            // is schema drift, not a foreign file, and stays incomplete on purpose.
+            budget.statistics.foreignDatabases += 1
+            return DatabaseAttempt(SourceResult())
+        case .unsupported:
+            // The deferred transaction first touches the file at the schema read, so a declined WAL open
+            // surfaces here as a failed prepare and leaves SQLITE_CANTOPEN as the connection's last error.
+            return DatabaseAttempt(
+                SourceResult(isComplete: false),
+                cannotOpen: sqlite3_errcode(database) == SQLITE_CANTOPEN)
+        }
         sqlite3_limit(database, SQLITE_LIMIT_LENGTH, Int32(maximumValueBytes))
         var statement: OpaquePointer?
         defer { sqlite3_finalize(statement) }
@@ -129,18 +249,21 @@ extension AntigravityLocalReader {
         if let failure = progress.failure {
             throw failure
         }
-        guard prepared == SQLITE_OK, let activeStatement = statement else { return SourceResult(isComplete: false) }
+        guard prepared == SQLITE_OK, let activeStatement = statement else {
+            return DatabaseAttempt(SourceResult(isComplete: false), cannotOpen: prepared == SQLITE_CANTOPEN)
+        }
         sqlite3_bind_int64(activeStatement, 1, Int64(min(budget.limits.rowsPerDatabase, 10000) + 1))
         let session = url.deletingPathExtension().lastPathComponent
         var rows = try self.readRows(activeStatement, session: session, progress: progress)
         if !rows.pendingTimestampRows.isEmpty {
             // Positional recovery is safe only when every generation row participated in the occurrence list.
             // A malformed row can still carry a reused step UUID, so partial primary scans must not realign later rows.
-            guard rows.source.isComplete else { return rows.source }
+            guard rows.source.isComplete else { return DatabaseAttempt(rows.source) }
             // Release the gen_metadata cursor before the optional steps pass reuses the same snapshot.
             sqlite3_finalize(activeStatement)
             statement = nil
-            let hasSteps = try self.hasSupportedStepsTable(database, budget: budget)
+            let hasSteps = try self.inspectSQLiteTableSupport(
+                database, table: "steps", payloadColumn: "metadata", budget: budget) == .supported
             if let failure = progress.failure {
                 throw failure
             }
@@ -157,7 +280,7 @@ extension AntigravityLocalReader {
                       self.embeddedTimestampsAgree(neededStepOccurrences, with: stepScan, botIDUses: rows.botIDUses)
                 else {
                     rows.source.isComplete = false
-                    return rows.source
+                    return DatabaseAttempt(rows.source)
                 }
                 let recoveredCount = self.appendRecoveredEvents(
                     to: &rows,
@@ -170,9 +293,9 @@ extension AntigravityLocalReader {
                 rows.source.isComplete = false
             }
         }
-        return rows.source
+        return DatabaseAttempt(rows.source)
         #else
-        return SourceResult(isComplete: false)
+        return DatabaseAttempt(SourceResult(isComplete: false))
         #endif
     }
 
@@ -191,12 +314,6 @@ extension AntigravityLocalReader {
     }
 
     private struct StepOccurrence {
-        let row: Int64
-        let timestampMs: Int64?
-        let botID: String?
-    }
-
-    private struct StepTimestamp {
         let row: Int64
         let timestampMs: Int64?
         let botID: String?
@@ -242,7 +359,6 @@ extension AntigravityLocalReader {
         guard !neededStepOccurrences.isEmpty else {
             return StepTimestampScan(timestamps: [:], byBotID: [:], ambiguousBotIDs: [], isComplete: true)
         }
-        let neededStepUUIDCounts = neededStepOccurrences.mapValues(\.count)
         let stepProgress = StepScanProgress(progress: progress)
         let registered = sqlite3_create_function_v2(
             database,
@@ -290,11 +406,12 @@ extension AntigravityLocalReader {
         guard prepared == SQLITE_OK, let statement else {
             return StepTimestampScan(timestamps: [:], byBotID: [:], ambiguousBotIDs: [], isComplete: false)
         }
-        var stepTimestamps: [String: [StepTimestamp]] = [:]
+        var stepTimestamps: [String: [StepOccurrence]] = [:]
         var exactByBotID: [String: ExactStepTimestamp] = [:]
         var ambiguousBotIDs = Set<String>()
         var isComplete = false
         var rowsAreValid = true
+        var sawUnidentifiedRows = false
         while true {
             try progress.budget.check()
             let step = sqlite3_step(statement)
@@ -315,7 +432,7 @@ extension AntigravityLocalReader {
             let attemptedBytes = max(count, payload.byteCount)
             try progress.budget.chargeBytes(attemptedBytes)
             guard attemptedBytes <= progress.budget.limits.databaseBytes - progress.databaseBytes
-            else { break }
+            else { throw ScanFailure.exhausted }
             progress.databaseBytes += attemptedBytes
             guard count > 0, count <= progress.budget.limits.blobBytes,
                   sqlite3_column_type(statement, 0) == SQLITE_INTEGER,
@@ -331,37 +448,31 @@ extension AntigravityLocalReader {
                 rowsAreValid = false
                 continue
             }
-            guard let stepUUID = parsed.stepUUID, !stepUUID.isEmpty else {
-                rowsAreValid = false
-                continue
-            }
             if let botID = parsed.botID {
                 self.recordExactBotID(
                     botID,
-                    stepUUID: stepUUID,
+                    stepUUID: parsed.stepUUID,
                     timestampMs: parsed.timestampMs,
                     exact: &exactByBotID,
                     ambiguous: &ambiguousBotIDs)
             }
-            if neededStepUUIDCounts[stepUUID] != nil {
-                stepTimestamps[stepUUID, default: []].append(StepTimestamp(
+            // Unidentified rows cannot supply UUID positions, but their bot IDs still count as evidence.
+            guard let stepUUID = parsed.stepUUID else {
+                sawUnidentifiedRows = true
+                continue
+            }
+            if neededStepOccurrences[stepUUID] != nil {
+                stepTimestamps[stepUUID, default: []].append(StepOccurrence(
                     row: sqlite3_column_int64(statement, 0),
                     timestampMs: parsed.timestampMs,
                     botID: parsed.botID))
             }
         }
-        // Preserve ambiguous rows' positions; removing them would shift later timestamps into their slots.
-        let positionalEntries = Dictionary(uniqueKeysWithValues: stepTimestamps.map { entry in
-            (entry.key, entry.value.map { step in
-                StepTimestamp(
-                    row: step.row,
-                    timestampMs: step.botID.map { ambiguousBotIDs.contains($0) } == true ? nil : step.timestampMs,
-                    botID: step.botID)
-            })
-        })
         let resolved = self.resolveStepTimestamps(
-            positionalEntries,
-            neededStepOccurrences: neededStepOccurrences)
+            stepTimestamps,
+            neededStepOccurrences: neededStepOccurrences,
+            ambiguousBotIDs: ambiguousBotIDs,
+            unidentifiedRowsPresent: sawUnidentifiedRows)
         return StepTimestampScan(
             timestamps: resolved,
             byBotID: exactByBotID,
@@ -371,13 +482,13 @@ extension AntigravityLocalReader {
 
     private static func recordExactBotID(
         _ botID: String,
-        stepUUID: String,
+        stepUUID: String?,
         timestampMs: Int64?,
         exact: inout [String: ExactStepTimestamp],
         ambiguous: inout Set<String>)
     {
         guard !ambiguous.contains(botID) else { return }
-        guard let timestampMs else {
+        guard let stepUUID, let timestampMs else {
             exact.removeValue(forKey: botID)
             ambiguous.insert(botID)
             return
@@ -412,8 +523,10 @@ extension AntigravityLocalReader {
     }
 
     private static func resolveStepTimestamps(
-        _ stepTimestamps: [String: [StepTimestamp]],
-        neededStepOccurrences: [String: [StepOccurrence]]) -> [String: [Int64]]
+        _ stepTimestamps: [String: [StepOccurrence]],
+        neededStepOccurrences: [String: [StepOccurrence]],
+        ambiguousBotIDs: Set<String>,
+        unidentifiedRowsPresent: Bool) -> [String: [Int64]]
     {
         var resolved: [String: [Int64]] = [:]
         for (stepUUID, timestamps) in stepTimestamps {
@@ -427,9 +540,15 @@ extension AntigravityLocalReader {
             guard !zip(sorted, sorted.dropFirst()).contains(where: { pair in pair.0.row == pair.1.row }) else {
                 continue
             }
-            let orderedTimestamps = sorted.map(\.timestampMs)
+            // Keep ambiguous slots so later timestamps cannot slide into their positions.
+            let orderedTimestamps = sorted.map { step in
+                step.botID.map { ambiguousBotIDs.contains($0) } == true ? nil : step.timestampMs
+            }
             let selected: [Int64]
-            if orderedTimestamps.count == 1, let sharedTimestamp = orderedTimestamps[0] {
+            // Sharing one timestamp across reused UUIDs requires a complete identity census.
+            if orderedTimestamps.count == 1, neededCount == 1 || !unidentifiedRowsPresent,
+               let sharedTimestamp = orderedTimestamps[0]
+            {
                 selected = Array(repeating: sharedTimestamp, count: neededCount)
             } else {
                 guard orderedTimestamps.count >= neededCount else { continue }
@@ -451,7 +570,7 @@ extension AntigravityLocalReader {
         progress: SQLProgress) throws -> ParsedRows
     {
         let budget = progress.budget
-        var result = SourceResult()
+        var result = SourceResult(containsHistorySource: true)
         var pendingTimestampRows: [PendingTimestampRow] = []
         var stepOccurrences: [String: [StepOccurrence]] = [:]
         var botIDUses: [String: Int] = [:]

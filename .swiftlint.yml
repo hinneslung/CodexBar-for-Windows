@@ -1,4 +1,4 @@
-# SwiftLint configuration for Peekaboo - Swift 6 compatible
+# SwiftLint configuration for CodexBar
 
 # Paths to include
 included:
@@ -23,8 +23,6 @@ excluded:
   - fastlane
   - vendor
   - "*.playground"
-  # Exclude specific files that should not be linted/formatted
-  - "Core/PeekabooCore/Sources/PeekabooCore/Extensions/NSArray+Extensions.swift"
 
 # Analyzer rules (require compilation)
 analyzer_rules:

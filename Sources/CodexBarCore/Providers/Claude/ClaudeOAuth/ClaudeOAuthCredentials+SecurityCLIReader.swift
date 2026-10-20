@@ -42,8 +42,7 @@ extension ClaudeOAuthCredentialsStore {
     }
 
     /// Attempts a Claude keychain read via `/usr/bin/security` when the experimental reader is enabled.
-    /// - Important: `interaction` is diagnostics context only. The stored Never policy still blocks the CLI because
-    ///   `security` can prompt.
+    /// The external reader follows the stored prompt policy because `security` can prompt.
     static func loadFromClaudeKeychainViaSecurityCLIIfEnabled(
         interaction: ProviderInteraction,
         readStrategy: ClaudeOAuthKeychainReadStrategy = ClaudeOAuthKeychainReadStrategyPreference.current())
@@ -96,79 +95,34 @@ extension ClaudeOAuthCredentialsStore {
         // `/usr/bin/security` is not constrained by Security.framework's no-UI flags. Keep the ownership gate at
         // the process-launch boundary so no caller can bypass it by selecting the experimental reader.
         guard self.keychainAccessAllowed else { return nil }
-        guard ClaudeOAuthKeychainPromptPreference.storedMode() != .never else { return nil }
+        let mode = ClaudeOAuthKeychainPromptPreference.storedMode()
+        guard mode == .always || mode == .onlyOnUserAction && interaction == .userInitiated else { return nil }
         let interactionMetadata = interaction == .userInitiated ? "user" : "background"
 
         do {
             let preferredAccount = self.preferredClaudeKeychainAccountForSecurityCLIRead(
                 interaction: interaction)
-            let output: Data
-            let status: Int32
-            let stderrLength: Int
-            let durationMs: Double
-            #if DEBUG
-            if let override = self.taskSecurityCLIReadOverride {
-                switch override {
-                case let .data(data):
-                    output = data ?? Data()
-                    status = 0
-                    stderrLength = 0
-                    durationMs = 0
-                case .timedOut:
-                    throw SecurityCLIReadError.timedOut
-                case .nonZeroExit:
-                    throw SecurityCLIReadError.nonZeroExit(status: 1, stderrLength: 0)
-                case let .dynamic(read):
-                    output = read(SecurityCLIReadRequest(account: preferredAccount)) ?? Data()
-                    status = 0
-                    stderrLength = 0
-                    durationMs = 0
-                }
-            } else {
-                let result = try self.runClaudeSecurityCLIRead(
-                    timeout: self.securityCLIReadTimeout,
-                    account: preferredAccount,
-                    environment: environment)
-                output = result.stdout
-                status = result.status
-                stderrLength = result.stderrLength
-                durationMs = result.durationMs
-            }
-            #else
             let result = try self.runClaudeSecurityCLIRead(
                 timeout: self.securityCLIReadTimeout,
                 account: preferredAccount,
                 environment: environment)
-            output = result.stdout
-            status = result.status
-            stderrLength = result.stderrLength
-            durationMs = result.durationMs
-            #endif
 
-            let sanitized = self.sanitizeSecurityCLIOutput(output)
+            let sanitized = self.sanitizeSecurityCLIOutput(result.stdout)
             guard !sanitized.isEmpty else { return nil }
+            let metadata = [
+                "reader": "securityCLI",
+                "callerInteraction": interactionMetadata,
+                "status": "\(result.status)",
+                "duration_ms": String(format: "%.2f", result.durationMs),
+                "stderr_length": "\(result.stderrLength)",
+                "payload_bytes": "\(sanitized.count)",
+            ]
             if ClaudeOAuthCredentials.isMcpOAuthOnlyPayload(data: sanitized) {
                 self.log.warning(
                     "Claude keychain security CLI output is MCP OAuth only; falling back",
-                    metadata: [
-                        "reader": "securityCLI",
-                        "callerInteraction": interactionMetadata,
-                        "status": "\(status)",
-                        "duration_ms": String(format: "%.2f", durationMs),
-                        "stderr_length": "\(stderrLength)",
-                        "payload_bytes": "\(sanitized.count)",
-                    ])
+                    metadata: metadata)
             } else {
-                self.log.debug(
-                    "Claude keychain security CLI raw read succeeded",
-                    metadata: [
-                        "reader": "securityCLI",
-                        "callerInteraction": interactionMetadata,
-                        "status": "\(status)",
-                        "duration_ms": String(format: "%.2f", durationMs),
-                        "stderr_length": "\(stderrLength)",
-                        "payload_bytes": "\(sanitized.count)",
-                    ])
+                self.log.debug("Claude keychain security CLI raw read succeeded", metadata: metadata)
             }
             return sanitized
         } catch let error as SecurityCLIReadError {
@@ -218,6 +172,23 @@ extension ClaudeOAuthCredentialsStore {
         account: String?,
         environment: [String: String]) throws -> SecurityCLIReadCommandResult
     {
+        #if DEBUG
+        if let override = self.taskSecurityCLIReadOverride {
+            let output: Data?
+            switch override {
+            case let .data(data):
+                output = data
+            case .timedOut:
+                throw SecurityCLIReadError.timedOut
+            case .nonZeroExit:
+                throw SecurityCLIReadError.nonZeroExit(status: 1, stderrLength: 0)
+            case let .dynamic(read):
+                output = read(SecurityCLIReadRequest(account: account))
+            }
+            return SecurityCLIReadCommandResult(
+                status: 0, stdout: output ?? Data(), stderrLength: 0, durationMs: 0)
+        }
+        #endif
         guard FileManager.default.isExecutableFile(atPath: self.securityBinaryPath) else {
             throw SecurityCLIReadError.binaryUnavailable
         }

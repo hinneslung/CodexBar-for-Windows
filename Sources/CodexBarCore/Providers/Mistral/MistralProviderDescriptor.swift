@@ -1,5 +1,4 @@
 import Foundation
-import SweetCookieKit
 
 public enum MistralProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
@@ -11,19 +10,10 @@ public enum MistralProviderDescriptor {
         requiresManualCookieSource: true,
         cookieName: nil))
 
-    /// Preserve Chrome-first behavior, then Firefox and Safari; other Chromium forks remain manual-only.
-    private static var browserCookieOrder: BrowserCookieImportOrder? {
-        #if os(macOS)
-        [.chrome, .firefox, .safari]
-        #else
-        nil
-        #endif
-    }
-
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .mistral,
-            menuBarMetrics: ProviderMenuBarMetricCapabilities(supported: [.automatic, .monthlyPlan]),
+            menuBarMetrics: ProviderMenuBarMetricCapabilities(supported: [.automatic, .primary, .monthlyPlan]),
             settingsSection: .init(MistralProviderSettingsKey.self, cookieSettings: MistralProviderSettings.self),
             credentials: self.credentials,
             metadata: ProviderMetadata(
@@ -40,18 +30,17 @@ public enum MistralProviderDescriptor {
                 defaultEnabled: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
-                balanceOnly: true,
                 usesDetailBackedWindow: true,
-                browserCookieOrder: self.browserCookieOrder,
+                browserCookieOrder: ProviderBrowserCookieDefaults.defaultImportOrder,
                 dashboardURL: "https://admin.mistral.ai/organization/usage",
                 statusPageURL: nil,
                 statusLinkURL: "https://status.mistral.ai"),
             branding: ProviderBranding(
                 iconStyle: .init(provider: .mistral),
                 iconResourceName: "ProviderIcon-mistral",
-                color: ProviderColor(red: 255 / 255, green: 80 / 255, blue: 15 / 255),
+                color: ProviderColor(hex: 0xFF5229),
                 confettiPalette: [
-                    ProviderColor(hex: 0xFA500F),
+                    ProviderColor(hex: 0xFF5229),
                     ProviderColor(hex: 0xFFAF01),
                     ProviderColor(hex: 0xFFE000),
                 ]),
@@ -61,28 +50,69 @@ public enum MistralProviderDescriptor {
                 menuHintLines: [.literal("Reported by Mistral billing usage.")],
                 showsCostMenuSection: false,
                 primaryValue: .latestDaily),
-            presentation: ProviderUsagePresentation(menuBarWindowResolver: { context in
-                guard context.metric == .monthlyPlan else { return .unhandled }
-                return .resolved(context.snapshot.extraRateWindows?.first {
-                    $0.id == "mistral-monthly-plan"
-                }?.window)
-            }, menuCard: ProviderMenuCardPresentation(
-                usesProviderCostHistoryAsPrimaryDashboard: true,
-                primaryCostHistoryResolver: { snapshot, tokenSnapshot in
-                    if let projected = snapshot?.mistralUsage?.toCostUsageTokenSnapshot() {
-                        return projected
-                    }
-                    return snapshot == nil ? tokenSnapshot : nil
+            presentation: ProviderUsagePresentation(
+                rateWindowLabeler: { metadata, snapshot, _ in
+                    ProviderRateWindowLabels(
+                        primary: snapshot.primary == nil ? metadata.sessionLabel : "Included API",
+                        secondary: metadata.weeklyLabel,
+                        tertiary: metadata.opusLabel ?? "Sonnet",
+                        showsTertiary: metadata.supportsOpus)
                 },
-                showsPrimaryBalanceDescription: true,
-                hidesPrimaryResetWithoutDate: true)),
+                extraRateWindowSelector: { snapshot in
+                    (snapshot.extraRateWindows ?? []).filter { $0.id == "mistral-monthly-plan" }
+                },
+                menuBarLayoutPrimaryLabel: "Included API",
+                menuBarWindowResolver: { context in
+                    switch context.metric {
+                    case .automatic:
+                        .resolved(nil)
+                    case .monthlyPlan:
+                        .resolved(context.snapshot.extraRateWindows?.first { $0.id == "mistral-monthly-plan" }?.window)
+                    default:
+                        .unhandled
+                    }
+                },
+                widgetRowResolver: self.widgetRows,
+                menuCard: ProviderMenuCardPresentation(
+                    usesProviderCostHistoryAsPrimaryDashboard: true,
+                    primaryCostHistoryResolver: { snapshot, tokenSnapshot in
+                        if let projected = snapshot?.mistralUsage?.toCostUsageTokenSnapshot() {
+                            return projected
+                        }
+                        return snapshot == nil ? tokenSnapshot : nil
+                    },
+                    showsPrimaryBalanceDescription: true,
+                    hidesPrimaryResetWithoutDate: true,
+                    extraRateWindowUsesResetDescriptionAsDetail: { $0.id == "mistral-monthly-plan" }),
+                menu: ProviderMenuDescriptorPresentation(primaryDescriptionIsDetail: { _ in true })),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .web],
                 pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [MistralWebFetchStrategy()] })),
             cli: ProviderCLIConfig(
                 name: "mistral",
                 aliases: ["mistral-ai"],
-                versionDetector: nil))
+                versionDetector: nil,
+                browserSupportExemption: { _, _, settings in
+                    // A pasted Cookie header needs no browser import, so it works on Linux too.
+                    settings?.mistral?.cookieSource == .manual &&
+                        CookieHeaderNormalizer.normalize(settings?.mistral?.manualCookieHeader) != nil
+                }))
+    }
+
+    private static func widgetRows(
+        _ rows: [WidgetSnapshot.WidgetUsageRowSnapshot],
+        snapshot: UsageSnapshot,
+        metric: ProviderMenuBarMetric) -> [WidgetSnapshot.WidgetUsageRowSnapshot]
+    {
+        guard metric == .monthlyPlan,
+              let plan = snapshot.extraRateWindows?.first(where: { $0.id == "mistral-monthly-plan" }),
+              plan.usageKnown
+        else { return rows }
+        return [WidgetSnapshot.WidgetUsageRowSnapshot(
+            id: plan.id,
+            title: plan.title,
+            percentLeft: plan.window.remainingPercent,
+            window: plan.window)]
     }
 }
 
@@ -91,18 +121,16 @@ struct MistralWebFetchStrategy: ProviderFetchStrategy {
     let kind: ProviderFetchKind = .web
 
     func isAvailable(_ context: ProviderFetchContext) async -> Bool {
-        guard context.settings?.mistral?.cookieSource != .off else { return false }
-        return true
+        context.settings?.mistral?.cookieSource != .off
     }
 
     func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
         let cookieSource = context.settings?.mistral?.cookieSource ?? .auto
-        let session = try Self.resolveCookieSession(context: context, allowCached: true)
+        let session = try Self.resolveCookieSession(context: context)
         do {
-            let csrf = session.csrfToken
             let usage = try await Self.fetchUsageWithVibe(
                 cookieHeader: session.cookieHeader,
-                csrfToken: csrf,
+                csrfToken: session.csrfToken,
                 timeout: context.webTimeout)
             return self.makeResult(
                 usage: usage,
@@ -115,9 +143,9 @@ struct MistralWebFetchStrategy: ProviderFetchStrategy {
             } else {
                 Set([session.sourceLabel].compactMap(\.self))
             }
-            let sessions: [MistralCookieImporter.SessionInfo]
+            let sessions: AnySequence<MistralCookieImporter.SessionInfo>
             do {
-                sessions = try MistralCookieImporter.importSessions(
+                sessions = try MistralCookieImporter.sessionCandidates(
                     browserDetection: context.browserDetection,
                     excludingSourceLabels: excludedSourceLabels)
             } catch MistralCookieImportError.noCookies {
@@ -141,17 +169,16 @@ struct MistralWebFetchStrategy: ProviderFetchStrategy {
 
     #if os(macOS)
     static func fetchUsageFromSessions(
-        _ sessions: [MistralCookieImporter.SessionInfo],
+        _ sessions: some Sequence<MistralCookieImporter.SessionInfo>,
         timeout: TimeInterval,
         transport: ProviderHTTPTransport = ProviderHTTPClient.shared) async throws
         -> (usage: UsageSnapshot, session: MistralCookieImporter.SessionInfo)
     {
         for session in sessions {
             do {
-                let csrf = session.csrfToken
                 let usage = try await Self.fetchUsageWithVibe(
                     cookieHeader: session.cookieHeader,
-                    csrfToken: csrf,
+                    csrfToken: session.csrfToken,
                     timeout: timeout,
                     transport: transport)
                 return (usage, session)
@@ -176,7 +203,19 @@ struct MistralWebFetchStrategy: ProviderFetchStrategy {
             timeout: timeout,
             transport: transport)
         var remaining = deadline.timeIntervalSinceNow
-        let vibeResult: MistralUsageFetcher.MistralVibeUsageResult? = if let csrfToken, remaining > 0 {
+        let budgets: MistralSubscriptionBudgets? = if remaining > 0 {
+            try await Self.fetchOptionalSubscriptionBudgets(
+                cookieHeader: cookieHeader,
+                timeout: min(remaining, 4),
+                transport: transport)
+        } else {
+            nil
+        }
+        remaining = deadline.timeIntervalSinceNow
+        let vibeResult: MistralUsageFetcher.MistralVibeUsageResult? = if budgets?.vibe == nil,
+                                                                         let csrfToken,
+                                                                         remaining > 0
+        {
             try await Self.fetchOptionalVibeUsage(
                 csrfToken: csrfToken,
                 cookieHeader: cookieHeader,
@@ -195,7 +234,30 @@ struct MistralWebFetchStrategy: ProviderFetchStrategy {
         } else {
             nil
         }
-        return Self.attachVibeWindow(to: snapshot.with(credits: credits).toUsageSnapshot(), vibeResult: vibeResult)
+        var result = snapshot.with(credits: credits).toUsageSnapshot()
+        if let budgets {
+            result = Self.attachSubscriptionBudgets(to: result, budgets: budgets)
+        }
+        return Self.attachVibeWindow(to: result, vibeResult: vibeResult)
+    }
+
+    static func fetchOptionalSubscriptionBudgets(
+        cookieHeader: String,
+        timeout: TimeInterval,
+        transport: ProviderHTTPTransport = ProviderHTTPClient.shared) async throws
+        -> MistralSubscriptionBudgets?
+    {
+        do {
+            return try await MistralUsageFetcher.fetchSubscriptionBudgets(
+                cookieHeader: cookieHeader,
+                timeout: timeout,
+                transport: transport)
+        } catch {
+            if error is CancellationError || (error as? URLError)?.code == .cancelled || Task.isCancelled {
+                throw CancellationError()
+            }
+            return nil
+        }
     }
 
     static func fetchOptionalCredits(
@@ -240,6 +302,41 @@ struct MistralWebFetchStrategy: ProviderFetchStrategy {
         }
     }
 
+    static func attachSubscriptionBudgets(
+        to usageSnapshot: UsageSnapshot,
+        budgets: MistralSubscriptionBudgets) -> UsageSnapshot
+    {
+        let apiWindow = budgets.api.map { budget in
+            RateWindow(
+                usedPercent: budget.usagePercentage,
+                windowMinutes: nil,
+                resetsAt: budget.resetsAt,
+                resetDescription: Self.budgetDescription(budget))
+        }
+        var extraWindows = usageSnapshot.extraRateWindows?.filter { $0.id != "mistral-monthly-plan" } ?? []
+        if let vibe = budgets.vibe {
+            let vibeWindow = RateWindow(
+                usedPercent: vibe.usagePercentage,
+                windowMinutes: nil,
+                resetsAt: vibe.resetsAt,
+                resetDescription: Self.budgetDescription(vibe))
+            extraWindows.append(NamedRateWindow(
+                id: "mistral-monthly-plan",
+                title: "Monthly Plan",
+                window: vibeWindow))
+        }
+        return usageSnapshot
+            .with(primary: apiWindow, secondary: usageSnapshot.secondary)
+            .with(extraRateWindows: extraWindows)
+    }
+
+    private static func budgetDescription(_ budget: MistralSubscriptionBudget) -> String {
+        let used = UsageFormatter.currencyString(budget.usedAmount, currencyCode: budget.currencyCode)
+        let limit = UsageFormatter.currencyString(budget.limit, currencyCode: budget.currencyCode)
+        let remaining = UsageFormatter.currencyString(budget.remainingAmount, currencyCode: budget.currencyCode)
+        return "\(used) / \(limit) · \(UsageFormatter.remainingString(from: remaining))"
+    }
+
     static func attachVibeWindow(
         to usageSnapshot: UsageSnapshot,
         vibeResult: MistralUsageFetcher.MistralVibeUsageResult?) -> UsageSnapshot
@@ -259,9 +356,7 @@ struct MistralWebFetchStrategy: ProviderFetchStrategy {
         false
     }
 
-    private static func resolveCookieSession(
-        context: ProviderFetchContext,
-        allowCached: Bool) throws
+    private static func resolveCookieSession(context: ProviderFetchContext) throws
         -> (cookieHeader: String, csrfToken: String?, sourceLabel: String?, wasCached: Bool)
     {
         if let settings = context.settings?.mistral, settings.cookieSource == .manual {
@@ -277,8 +372,7 @@ struct MistralWebFetchStrategy: ProviderFetchStrategy {
         }
 
         #if os(macOS)
-        if allowCached,
-           let cached = CookieHeaderCache.load(provider: .mistral),
+        if let cached = CookieHeaderCache.load(provider: .mistral),
            !cached.cookieHeader.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         {
             let pairs = CookieHeaderNormalizer.pairs(from: cached.cookieHeader)

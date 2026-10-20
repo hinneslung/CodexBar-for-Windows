@@ -8,6 +8,17 @@ import UniformTypeIdentifiers
 
 struct MenuBarLayoutEditorTests {
     @Test
+    func `saved history cost item uses the history window label`() throws {
+        try CodexBarLocalizationOverride.$appLanguage.withValue("en") {
+            let token = try JSONDecoder().decode(MenuBarLayoutToken.self, from: Data(#"{"cost30d":{}}"#.utf8))
+            let metric = try JSONDecoder().decode(MenuBarConditionalMetric.self, from: Data(#""cost30d""#.utf8))
+            #expect(token.editorLabel(provider: nil) == "Cost (History window)")
+            #expect(token.editorAccessibilityLabel(provider: nil) == "Cost (History window)")
+            #expect(metric.editorLabel(provider: nil) == "Cost (History window)")
+        }
+    }
+
+    @Test
     @MainActor
     func `all scope discloses only enabled saved overrides in provider order including equal layouts`() throws {
         let settings = try Self.overrideSettings()
@@ -93,6 +104,133 @@ struct MenuBarLayoutEditorTests {
     func `time palette lists the compact run out token with a clear label`() {
         #expect(MenuBarLayoutPaletteTokens.time.contains(.runsOutCompact))
         #expect(MenuBarLayoutToken.runsOutCompact.editorLabel(provider: .codex) == "Runs out (compact)")
+    }
+
+    @Test
+    func `cost window token is named after the history window`() {
+        for provider in [nil, UsageProvider.codex] {
+            #expect(MenuBarLayoutToken.costWindow.editorLabel(provider: provider) == "Cost (History window)")
+            #expect(MenuBarLayoutToken.costWindow.editorAccessibilityLabel(provider: provider)
+                == "Cost (History window)")
+        }
+        #expect(MenuBarLayoutToken.costToday.editorLabel(provider: nil) == "Cost today")
+    }
+
+    @Test
+    func `cost window conditional metric is named after the history window`() {
+        #expect(MenuBarConditionalMetric.costWindow.editorLabel(provider: nil) == "Cost (History window)")
+        let conditional = MenuBarLayoutConditional(
+            clauses: [MenuBarConditionalClause(
+                combinator: nil,
+                predicate: MenuBarConditionalPredicate(
+                    metric: .costWindow,
+                    comparison: .greaterThanOrEqual,
+                    threshold: 5))],
+            thenToken: .costWindow,
+            elseToken: .hidden)
+        #expect(conditional.editorSummary(provider: nil)
+            == "If Cost (History window) >= 5 USD then Cost (History window) else Hide")
+    }
+
+    @Test
+    func `Cursor exposes Grok Bot after its named window is available`() {
+        let grokBot = NamedRateWindow(
+            id: "cursor-grok-bot",
+            title: "Grok Bot",
+            window: RateWindow(usedPercent: 42, windowMinutes: nil, resetsAt: nil, resetDescription: nil))
+        let cursor = UsageSnapshot(primary: nil, secondary: nil, extraRateWindows: [grokBot], updatedAt: Date())
+
+        #expect(MenuBarLayoutPaletteTokens.usage(provider: .cursor, snapshot: cursor) == [
+            .percent(window: .session),
+            .percent(window: .weekly),
+            .percent(window: .scopedWeekly),
+            .percent(window: .spend),
+            .lanePercent(lane: .primary),
+            .lanePercent(lane: .secondary),
+            .extraPercent(id: "cursor-grok-bot"),
+            .percent(window: .automatic),
+            .usageBar,
+            .progressBar(window: .session),
+            .progressBar(window: .weekly),
+            .progressBar(window: .scopedWeekly),
+            .progressBar(window: .automatic),
+            .tokensPerMinute,
+            .tokensSparkline,
+            .pace(window: .session),
+            .pace(window: .weekly),
+            .pace(window: .automatic),
+            .pace(window: .spend),
+        ])
+        #expect(MenuBarLayoutPaletteTokens.conditionalBranch.contains(.progressBar(window: .scopedWeekly)))
+        #expect(!MenuBarLayoutPaletteTokens.usage(provider: .codex, snapshot: cursor)
+            .contains(.extraPercent(id: "cursor-grok-bot")))
+        #expect(!MenuBarLayoutPaletteTokens.usage(provider: .cursor, snapshot: nil)
+            .contains(.extraPercent(id: "cursor-grok-bot")))
+    }
+
+    @Test
+    func `spend tokens are in the layout and conditional palettes`() {
+        let spendUsage: [MenuBarLayoutToken] = [.percent(window: .spend), .pace(window: .spend)]
+        let spendTime: [MenuBarLayoutToken] = [
+            .windowResetCountdown(window: .spend), .windowResetAbsolute(window: .spend),
+        ]
+        let spendMoney: [MenuBarLayoutToken] = [.spendAmount, .spendBudget]
+        #expect(spendUsage.allSatisfy(MenuBarLayoutPaletteTokens.usage(provider: .codex, snapshot: nil).contains))
+        #expect(spendTime.allSatisfy(MenuBarLayoutPaletteTokens.time.contains))
+        let branch = MenuBarLayoutPaletteTokens.conditionalBranch
+        #expect((spendUsage + spendTime + spendMoney).allSatisfy(branch.contains))
+    }
+
+    @Test
+    func `reset window choices are available in layout and conditional palettes`() {
+        let choices: [MenuBarLayoutToken] = [
+            .resetCountdown,
+            .resetAbsolute,
+            .windowResetCountdown(window: .session),
+            .windowResetAbsolute(window: .session),
+            .windowResetCountdown(window: .weekly),
+            .windowResetAbsolute(window: .weekly),
+        ]
+        for token in choices {
+            #expect(MenuBarLayoutPaletteTokens.time.contains(token))
+            #expect(MenuBarLayoutPaletteTokens.conditionalBranch.contains(token))
+        }
+        for window in [PercentWindow.scopedWeekly, .automatic] {
+            #expect(!MenuBarLayoutPaletteTokens.time.contains(.windowResetCountdown(window: window)))
+            #expect(!MenuBarLayoutPaletteTokens.time.contains(.windowResetAbsolute(window: window)))
+        }
+    }
+
+    @Test
+    func `reset window labels distinguish countdown and absolute choices accessibly`() {
+        for (window, title) in [(PercentWindow.session, L("Session")), (.weekly, L("Weekly"))] {
+            let countdown = MenuBarLayoutToken.windowResetCountdown(window: window)
+            let absolute = MenuBarLayoutToken.windowResetAbsolute(window: window)
+            let countdownLabel = L("%@: %@", title, L("menu_bar_layout_token_resets_in"))
+            let absoluteLabel = L("%@: %@", title, L("menu_bar_layout_token_reset_at"))
+
+            #expect(countdown.editorLabel(provider: .codex) == countdownLabel)
+            #expect(countdown.editorAccessibilityLabel(provider: .codex) == countdownLabel)
+            #expect(countdown.editorSystemImage == "timer")
+            #expect(absolute.editorLabel(provider: .codex) == absoluteLabel)
+            #expect(absolute.editorAccessibilityLabel(provider: .codex) == absoluteLabel)
+            #expect(absolute.editorSystemImage == "clock")
+        }
+        #expect(MenuBarLayoutToken.resetCountdown.editorLabel(provider: .codex)
+            == L("menu_bar_layout_token_resets_in"))
+        #expect(MenuBarLayoutToken.resetAbsolute.editorLabel(provider: .codex)
+            == L("menu_bar_layout_token_reset_at"))
+    }
+
+    @Test
+    func `reset secondary window labels follow provider cadence`() {
+        let countdown = MenuBarLayoutToken.windowResetCountdown(window: .weekly)
+        let absolute = MenuBarLayoutToken.windowResetAbsolute(window: .weekly)
+
+        #expect(countdown.editorLabel(provider: .notion)
+            == L("%@: %@", L("Monthly"), L("menu_bar_layout_token_resets_in")))
+        #expect(absolute.editorAccessibilityLabel(provider: .notion)
+            == L("%@: %@", L("Monthly"), L("menu_bar_layout_token_reset_at")))
     }
 
     @Test
@@ -289,6 +427,16 @@ struct MenuBarLayoutEditorTests {
 
         #expect(MenuBarLayoutBalanceResolver.balance(provider: .openrouter, snapshot: snapshot) == "$12.34")
         #expect(MenuBarLayoutBalanceResolver.balance(provider: .codex, snapshot: snapshot) == nil)
+        #expect(MenuBarLayoutBalanceResolver.balance(
+            provider: .codex,
+            snapshot: snapshot,
+            codexCredits: CreditsSnapshot(
+                remaining: 1234,
+                events: [],
+                updatedAt: Date(),
+                balanceReadSucceeded: true,
+                creditsAvailable: true,
+                balanceIsWorkspace: true)) == "1,234")
         #expect(MenuBarLayoutToken.balance.editorLabel(provider: .openrouter) == L("Balance"))
     }
 

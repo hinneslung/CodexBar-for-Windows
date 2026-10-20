@@ -26,6 +26,8 @@ struct MenuBarLayoutTests {
                 .pace(window: .weekly),
                 .pace(window: .automatic),
                 .usageBar,
+                .progressBar(window: .session), .progressBar(window: .weekly),
+                .progressBar(window: .scopedWeekly), .progressBar(window: .automatic),
             ],
             [
                 .resetCountdown,
@@ -34,7 +36,7 @@ struct MenuBarLayoutTests {
                 .runsOutCompact,
                 .balance,
                 .costToday,
-                .cost30d,
+                .costWindow,
                 .separatorDot,
                 .space,
             ],
@@ -54,6 +56,20 @@ struct MenuBarLayoutTests {
         #expect(String(bytes: labeled, encoding: .utf8) == #"{"runsOut":{}}"#)
         #expect(String(bytes: compact, encoding: .utf8) == #"{"runsOutCompact":{}}"#)
         #expect(try JSONDecoder().decode(MenuBarLayoutToken.self, from: labeled) == .runsOut)
+    }
+
+    @Test
+    func `cost window token keeps its persisted discriminator`() throws {
+        let encoded = try JSONEncoder().encode(MenuBarLayoutToken.costWindow)
+
+        #expect(String(bytes: encoded, encoding: .utf8) == #"{"cost30d":{}}"#)
+        #expect(try JSONDecoder().decode(MenuBarLayoutToken.self, from: encoded) == .costWindow)
+        #expect(try JSONDecoder().decode(MenuBarLayoutToken.self, from: Data(#"{"cost30d":{}}"#.utf8)) == .costWindow)
+        #expect(MenuBarConditionalMetric.costWindow.rawValue == "cost30d")
+        #expect(MenuBarConditionalMetric(rawValue: "cost30d") == .costWindow)
+        let metric = try JSONEncoder().encode(MenuBarConditionalMetric.costWindow)
+        #expect(String(bytes: metric, encoding: .utf8) == #""cost30d""#)
+        #expect(try JSONDecoder().decode(MenuBarConditionalMetric.self, from: metric) == .costWindow)
     }
 
     @Test
@@ -95,7 +111,6 @@ struct MenuBarLayoutTests {
 
     @Test
     func `conditional normalization clamps thresholds and clause count`() {
-        let predicate = MenuBarConditionalPredicate(metric: .session, comparison: .greaterThan, threshold: 0)
         let manyClauses = (0..<6).map { index in
             MenuBarConditionalClause(
                 combinator: index == 0 ? .or : .and,
@@ -431,12 +446,12 @@ struct MenuBarLayoutTests {
     /// label beside the threshold field is `thresholdUnit`.
     @Test
     func `metric drives the editor row controls and units`() {
-        #expect(MenuBarConditionalMetric.allCases.count == 18)
+        #expect(MenuBarConditionalMetric.allCases.count == 22)
 
         let withDirection = MenuBarConditionalMetric.allCases.filter(\.supportsDirection)
         #expect(withDirection == [
-            .session, .weekly, .scopedWeekly, .automatic,
-            .primaryLane, .secondaryLane, .tertiaryLane, .balance,
+            .session, .weekly, .scopedWeekly, .automatic, .spend,
+            .primaryLane, .secondaryLane, .tertiaryLane, .balance, .spendAmount,
         ])
 
         #expect(MenuBarConditionalMetric.session.thresholdUnit == "%")
@@ -813,6 +828,17 @@ struct MenuBarLayoutTests {
     }
 
     @Test
+    func `named extra token persists labels and drops for older releases`() throws {
+        let token = MenuBarLayoutToken.extraPercent(id: "cursor-grok-bot")
+
+        #expect(try JSONDecoder().decode(MenuBarLayoutToken.self, from: JSONEncoder().encode(token)) == token)
+        #expect(token.editorLabel(provider: .cursor) == "Grok Bot %")
+        #expect(!token.hasReleasedRepresentation)
+        #expect(!token.hasLegacyRepresentation)
+        #expect(MenuBarLayout(lines: [[.icon, token]]).legacyCompatible() == MenuBarLayout(lines: [[.icon]]))
+    }
+
+    @Test
     func `Amp lane tokens use snapshot presentation labels`() {
         let snapshot = UsageSnapshot(
             primary: RateWindow(usedPercent: 10, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
@@ -828,7 +854,7 @@ struct MenuBarLayoutTests {
     @Test
     func `direct lane tokens only expose provider supported metrics`() {
         #expect(MenuBarLayoutLane.available(for: nil).isEmpty)
-        #expect(MenuBarLayoutLane.available(for: .mistral).isEmpty)
+        #expect(MenuBarLayoutLane.available(for: .mistral) == [.primary])
         #expect(MenuBarLayoutLane.available(for: .openrouter) == [.primary])
         #expect(MenuBarLayoutLane.available(for: .cursor) == [.primary, .secondary])
 
@@ -848,8 +874,8 @@ struct MenuBarLayoutTests {
     }
 
     @Test
-    func `opencode go exposes the monthly tertiary lane once a window exists`() {
-        #expect(MenuBarLayoutLane.available(for: .opencodego) == [.primary, .secondary])
+    func `opencode go exposes the monthly tertiary lane before data arrives`() {
+        #expect(MenuBarLayoutLane.available(for: .opencodego) == [.primary, .secondary, .tertiary])
 
         let usageSnapshot = UsageSnapshot(
             primary: nil,
@@ -939,34 +965,21 @@ struct MenuBarLayoutTests {
     }
 
     @Test
-    func `migration maps every legacy style mode metric and reset combination`() {
-        var visited = 0
-        for style in MenuBarIconStyle.allCases {
-            for mode in MenuBarDisplayMode.allCases {
-                for metric in MenuBarMetricPreference.allCases {
-                    for resetStyle in [ResetTimeDisplayStyle.countdown, .absolute] {
-                        let resolution = MenuBarLayoutResolution.legacy(
-                            iconStyle: style,
-                            displayMode: mode,
-                            metricPreference: metric,
-                            resetTimeDisplayStyle: resetStyle)
-                        let layout = resolution.layout
-                        #expect((1...2).contains(layout.lines.count))
-                        #expect(layout.lines.allSatisfy { !$0.isEmpty })
-                        #expect(resolution.legacySettings == MenuBarLayoutResolution.LegacySettings(
-                            iconStyle: style,
-                            displayMode: mode,
-                            metricPreference: metric,
-                            resetTimeDisplayStyle: resetStyle))
-                        #expect(resolution.usesLegacyRendering)
-                        visited += 1
-                    }
+    func `migration emits nonempty layouts for every legacy selection`() {
+        for mode in MenuBarDisplayMode.allCases {
+            for metric in MenuBarMetricPreference.allCases {
+                for resetStyle in [ResetTimeDisplayStyle.countdown, .absolute] {
+                    let resolution = MenuBarLayoutResolution.legacy(
+                        displayMode: mode,
+                        metricPreference: metric,
+                        resetTimeDisplayStyle: resetStyle)
+                    let layout = resolution.layout
+                    #expect((1...2).contains(layout.lines.count))
+                    #expect(layout.lines.allSatisfy { !$0.isEmpty })
+                    #expect(resolution.usesLegacyRendering)
                 }
             }
         }
-
-        #expect(visited == MenuBarIconStyle.allCases.count * MenuBarDisplayMode.allCases.count
-            * MenuBarMetricPreference.allCases.count * 2)
     }
 
     @Test
@@ -980,12 +993,10 @@ struct MenuBarLayoutTests {
             ],
         ])
         #expect(MenuBarLayout.migrated(
-            iconStyle: .iconAndPercent,
             displayMode: .percent,
             metricPreference: .primaryAndSecondary,
             resetTimeDisplayStyle: .countdown) == combinedLayout)
         #expect(MenuBarLayout.migrated(
-            iconStyle: .iconAndPercent,
             displayMode: .resetTime,
             metricPreference: .automatic,
             resetTimeDisplayStyle: .absolute) == MenuBarLayout(lines: [[.icon, .resetAbsolute]]))
@@ -994,13 +1005,11 @@ struct MenuBarLayoutTests {
     @Test
     func `migration preserves Kimi primary and secondary lane identity`() {
         #expect(MenuBarLayout.migrated(
-            iconStyle: .iconAndPercent,
             displayMode: .percent,
             metricPreference: .primary,
             resetTimeDisplayStyle: .countdown,
             provider: .kimi) == MenuBarLayout(lines: [[.icon, .percent(window: .weekly)]]))
         #expect(MenuBarLayout.migrated(
-            iconStyle: .iconAndPercent,
             displayMode: .percent,
             metricPreference: .secondary,
             resetTimeDisplayStyle: .countdown,
@@ -1013,7 +1022,6 @@ struct MenuBarLayoutTests {
 
         for displayMode in MenuBarDisplayMode.allCases {
             #expect(MenuBarLayout.migrated(
-                iconStyle: .iconAndPercent,
                 displayMode: displayMode,
                 metricPreference: .automatic,
                 resetTimeDisplayStyle: .countdown,
@@ -1021,7 +1029,6 @@ struct MenuBarLayoutTests {
         }
 
         #expect(MenuBarLayout.migrated(
-            iconStyle: .iconAndPercent,
             displayMode: .percent,
             metricPreference: .primary,
             resetTimeDisplayStyle: .countdown,
@@ -1161,17 +1168,19 @@ struct MenuBarLayoutTests {
         #expect(providerSettings.menuBarLayoutOverrides[.kimi] == providerLayout)
     }
 
-    @Test
+    @Test(arguments: MenuBarLayoutSize.allCases)
     @MainActor
-    func `provider override and display options persist across reload`() throws {
-        let suite = "MenuBarLayoutTests-provider-override"
+    func `provider override and display options persist across reload`(size: MenuBarLayoutSize) throws {
+        let suite = "MenuBarLayoutTests-provider-override-\(size.rawValue)"
         let settings = testSettingsStore(suiteName: suite)
         let global = try #require(MenuBarLayoutPreset.iconOnly.layout)
         let provider = try #require(MenuBarLayoutPreset.compactStacked.layout)
 
         settings.setMenuBarLayout(global, for: nil)
         settings.setMenuBarLayout(provider, for: .claude)
-        settings.menuBarLayoutSize = .small
+        #expect(!settings.menuBarLayoutMonospacedDigits)
+        settings.menuBarLayoutMonospacedDigits = true
+        settings.menuBarLayoutSize = size
         settings.menuBarLayoutGap = .tight
 
         #expect(settings.menuBarLayout(for: .codex) == global)
@@ -1181,7 +1190,8 @@ struct MenuBarLayoutTests {
         let reloaded = Self.reloadSettingsStore(settings)
         #expect(reloaded.menuBarLayout(for: .codex) == global)
         #expect(reloaded.menuBarLayout(for: .claude) == provider)
-        #expect(reloaded.menuBarLayoutSize == .small)
+        #expect(reloaded.menuBarLayoutSize == size)
+        #expect(reloaded.menuBarLayoutMonospacedDigits)
         #expect(reloaded.menuBarLayoutGap == .tight)
 
         reloaded.removeMenuBarLayoutOverride(for: .claude)

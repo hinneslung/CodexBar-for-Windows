@@ -6,15 +6,17 @@ import Testing
 private actor AgentSessionScanHarness {
     struct Call: Equatable, Sendable {
         let includeFileOnlySessions: Bool
+        let includeRolloutActivity: Bool
     }
 
     private var calls: [Call] = []
     private var continuations: [Int: CheckedContinuation<[AgentSession], Never>] = [:]
     private var callWaiters: [(count: Int, continuation: CheckedContinuation<Void, Never>)] = []
 
-    func scan(includeFileOnlySessions: Bool) async -> [AgentSession] {
+    func scan(includeFileOnlySessions: Bool, includeRolloutActivity: Bool) async -> [AgentSession] {
         let index = self.calls.count
-        self.calls.append(Call(includeFileOnlySessions: includeFileOnlySessions))
+        self.calls.append(Call(
+            includeFileOnlySessions: includeFileOnlySessions, includeRolloutActivity: includeRolloutActivity))
         self.resumeSatisfiedWaiters()
         return await withCheckedContinuation { continuation in
             self.continuations[index] = continuation
@@ -162,6 +164,7 @@ struct AgentSessionsStoreSchedulerTests {
         #expect(!store.schedulerState.hasRemotePeriodicTask)
 
         settings.agentSessionsEnabled = true
+        settings.agentSessionsRemoteEnabled = true
         store.settingsDidChange()
         #expect(store.schedulerState.hasLocalPeriodicTask)
         #expect(store.schedulerState.hasRemotePeriodicTask)
@@ -191,6 +194,7 @@ struct AgentSessionsStoreSchedulerTests {
         #expect(await spy.localCalls == [false])
 
         settings.agentSessionsEnabled = true
+        settings.agentSessionsRemoteEnabled = true
         store.settingsDidChange()
         await spy.waitForLocalCallCount(2)
         await spy.waitForRemoteCallCount(1)
@@ -224,13 +228,14 @@ struct AgentSessionsStoreSchedulerTests {
         #expect(!store.schedulerState.hasLocalPeriodicTask)
 
         settings.agentSessionsEnabled = true
+        settings.agentSessionsRemoteEnabled = true
         store.settingsDidChange()
         await scan.releaseCall(0, returning: [Self.session(id: "stale", activity: Date(timeIntervalSince1970: 1))])
         await scan.waitForCallCount(2)
 
         #expect(await scan.recordedCalls() == [
-            .init(includeFileOnlySessions: false),
-            .init(includeFileOnlySessions: true),
+            .init(includeFileOnlySessions: false, includeRolloutActivity: true),
+            .init(includeFileOnlySessions: true, includeRolloutActivity: false),
         ])
         #expect(store.localSessions.isEmpty)
         #expect(store.latestLocalActivityAt == nil)
@@ -248,6 +253,7 @@ struct AgentSessionsStoreSchedulerTests {
     func `remote configuration change rejects stale data and retries with current hosts`() async {
         let settings = testSettingsStore(suiteName: "AgentSessionsStoreSchedulerTests-remote-generation")
         settings.agentSessionsEnabled = true
+        settings.agentSessionsRemoteEnabled = true
         settings.agentSessionsManualHosts = "old-host"
         let remote = AgentSessionRemoteFetchHarness()
         let store = Self.makeStore(settings: settings, remote: remote)
@@ -275,6 +281,7 @@ struct AgentSessionsStoreSchedulerTests {
     func `menu refresh overlaps coalesce without an extra local pass`() async {
         let settings = testSettingsStore(suiteName: "AgentSessionsStoreSchedulerTests-menu-coalescing")
         settings.agentSessionsEnabled = true
+        settings.agentSessionsRemoteEnabled = true
         let scan = AgentSessionScanHarness()
         let store = Self.makeStore(settings: settings, scan: scan)
         store.start()
@@ -319,6 +326,78 @@ struct AgentSessionsStoreSchedulerTests {
         #expect(updateCount == 0)
     }
 
+    @Test
+    func `local only sessions never discover or fetch even on menu open`() async {
+        let settings = testSettingsStore(suiteName: "remote-local-only", userDefaults: InMemoryUserDefaults())
+        settings.agentSessionsEnabled = true
+        settings.agentSessionsManualHosts = "never.example.invalid"
+        let spy = AgentSessionRefreshSpy()
+        let store = AgentSessionsStore(
+            settings: settings,
+            localScan: { includeFiles, _ in await .init(sessions: spy.scan(includeFileOnlySessions: includeFiles)) },
+            remoteHostDiscovery: { Issue.record("Local-only mode must not discover hosts"); return [] },
+            remoteFetch: { await spy.fetch(hosts: $0) })
+        store.start()
+        await Self.waitForImmediateTasksToFinish(store)
+        store.refreshOnMenuOpen()
+        await Self.waitForImmediateTasksToFinish(store)
+        #expect(store.schedulerState.hasLocalPeriodicTask)
+        #expect(!store.schedulerState.hasRemotePeriodicTask)
+        #expect(await !(spy.localCalls).isEmpty)
+        #expect(await spy.remoteCalls.isEmpty)
+        store.stop()
+    }
+
+    @Test
+    func `disabling remote monitoring clears rows and rejects late results`() async {
+        let settings = testSettingsStore(suiteName: "remote-disable", userDefaults: InMemoryUserDefaults())
+        settings.agentSessionsEnabled = true
+        settings.agentSessionsRemoteEnabled = true
+        let remote = AgentSessionRemoteFetchHarness()
+        let store = Self.makeStore(settings: settings, remote: remote)
+        store.start()
+        await remote.waitForCallCount(1)
+        await remote.releaseCall(0, returning: [.init(host: "synthetic-host", sessions: [], error: nil)])
+        await Self.waitForImmediateTasksToFinish(store)
+        #expect(store.remoteHosts.count == 1)
+        store.refreshOnMenuOpen()
+        await remote.waitForCallCount(2)
+        settings.agentSessionsRemoteEnabled = false
+        store.settingsDidChange()
+        #expect(store.remoteHosts.isEmpty)
+        #expect(store.schedulerState.hasLocalPeriodicTask)
+        #expect(!store.schedulerState.hasRemotePeriodicTask)
+        await remote.releaseCall(1, returning: [.init(host: "stale-host", sessions: [], error: nil)])
+        await Self.waitForImmediateTasksToFinish(store)
+        #expect(store.remoteHosts.isEmpty)
+        store.stop()
+    }
+
+    @Test
+    func `disabling during discovery prevents a subsequent SSH fetch`() async {
+        let settings = testSettingsStore(suiteName: "remote-cancel-discovery", userDefaults: InMemoryUserDefaults())
+        settings.agentSessionsEnabled = true
+        settings.agentSessionsRemoteEnabled = true
+        let discovery = AgentSessionScanHarness()
+        let spy = AgentSessionRefreshSpy()
+        let store = AgentSessionsStore(
+            settings: settings,
+            localScan: { _, _ in .init() },
+            remoteHostDiscovery: {
+                _ = await discovery.scan(includeFileOnlySessions: false, includeRolloutActivity: false)
+                return ["never.example.invalid"]
+            },
+            remoteFetch: { await spy.fetch(hosts: $0) })
+        store.start()
+        await discovery.waitForCallCount(1)
+        settings.agentSessionsRemoteEnabled = false
+        store.settingsDidChange()
+        await discovery.releaseCall(0, returning: [])
+        await Self.waitForImmediateTasksToFinish(store)
+        #expect(await spy.remoteCalls.isEmpty)
+        store.stop()
+    }
+
     private static func makeStore(
         settings: SettingsStore,
         scan: AgentSessionScanHarness? = nil,
@@ -326,9 +405,10 @@ struct AgentSessionsStoreSchedulerTests {
     {
         AgentSessionsStore(
             settings: settings,
-            localScan: { includeFileOnlySessions in
-                guard let scan else { return [] }
-                return await scan.scan(includeFileOnlySessions: includeFileOnlySessions)
+            localScan: { includeFileOnlySessions, includeRolloutActivity in
+                guard let scan else { return .init() }
+                return await .init(sessions: scan.scan(
+                    includeFileOnlySessions: includeFileOnlySessions, includeRolloutActivity: includeRolloutActivity))
             },
             remoteHostDiscovery: { [] },
             remoteFetch: { hosts in
@@ -343,8 +423,8 @@ struct AgentSessionsStoreSchedulerTests {
     {
         AgentSessionsStore(
             settings: settings,
-            localScan: { includeFileOnlySessions in
-                await spy.scan(includeFileOnlySessions: includeFileOnlySessions)
+            localScan: { includeFileOnlySessions, _ in
+                await .init(sessions: spy.scan(includeFileOnlySessions: includeFileOnlySessions))
             },
             remoteHostDiscovery: { [] },
             remoteFetch: { hosts in

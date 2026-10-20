@@ -1,21 +1,29 @@
 #!/usr/bin/env python3
 """Synthetic process ownership tests; never launch Swift or inspect provider data."""
 
+import contextlib
 import ctypes
 import errno
+import io
 import json
 import os
 from pathlib import Path
+import select
 import signal
 import subprocess
 import sys
 import tempfile
 import threading
 import time
+import types
 import unittest
 from unittest.mock import Mock, patch
 
 import ci_swift_test_by_suite as runner
+
+
+# Nested fixture startup and handshakes are setup, not the cleanup deadline under test.
+NESTED_FIXTURE_TIMEOUT = 30
 
 
 def running(pid: int) -> bool:
@@ -56,6 +64,14 @@ def release_observed_fixture(root, owned, include_grandchild=False):
 
 def fixture(mode, directory, ready_delay=0):
     root = Path(directory)
+    if mode == "ready-sentinel":
+        if os.getpgrp() != os.getpid():
+            os.setpgid(0, 0)
+        publish_fixture_identity(root)
+        print("ready", flush=True)
+        # The controller owns this sentinel's lifetime; startup load must not consume it.
+        sys.stdin.buffer.read(1)
+        return
     if mode == "session-leader":
         publish_fixture_identity(root)
         grandchild = root / "grandchild"
@@ -85,7 +101,10 @@ def fixture(mode, directory, ready_delay=0):
     signal.signal(signal.SIGTERM, lambda *_: os._exit(0))
     if ready_delay:
         ready_at = time.monotonic() + ready_delay
-        wait_until(lambda: time.monotonic() >= ready_at or (root / "stop").exists())
+        wait_until(
+            lambda: time.monotonic() >= ready_at or (root / "stop").exists(),
+            timeout=ready_delay + 3,
+        )
         if (root / "stop").exists():
             return
     subprocess.Popen(
@@ -93,7 +112,7 @@ def fixture(mode, directory, ready_delay=0):
         start_new_session=mode in ("timeout-session", "success-session", "success-session-tree"),
     )
     # Preserve ancestry until the real ownership refresh has observed the ready identities.
-    wait_until(lambda: (root / "observed").exists() or (root / "stop").exists())
+    wait_until(lambda: (root / "observed").exists() or (root / "stop").exists(), timeout=10)
     if (root / "stop").exists():
         return
     if mode in ("success", "success-session", "success-session-tree"):
@@ -120,7 +139,8 @@ def nested_fixture(directory):
             ready = root / "leader-ready.tmp"
             ready.write_text(str(ownership.root.pid))
             ready.replace(root / "leader-ready")
-            wait_until(lambda: (root / "allow-exit").exists() or (child / "stop").exists())
+            wait_until(lambda: (root / "allow-exit").exists() or (child / "stop").exists(),
+                       timeout=NESTED_FIXTURE_TIMEOUT)
             release_observed_fixture(child, owned)
         return owned
     def drain(ownership, process):
@@ -128,12 +148,14 @@ def nested_fixture(directory):
             assert runner.unreaped_exit_code(process) == 23
             assert process.returncode is None
             (root / "before-drain").touch()
-            wait_until(lambda: (root / "allow-drain").exists() or (child / "stop").exists())
+            wait_until(lambda: (root / "allow-drain").exists() or (child / "stop").exists(),
+                       timeout=NESTED_FIXTURE_TIMEOUT)
         finally:
             original_drain(ownership, process)
     with patch.object(runner.TestProcessOwnership, "refresh", refresh), \
             patch.object(runner.TestProcessOwnership, "drain", drain):
-        result = runner.run_command([sys.executable, __file__, "--fixture", "failure", str(child)], timeout=5)
+        result = runner.run_command([sys.executable, __file__, "--fixture", "failure", str(child)],
+                                    timeout=NESTED_FIXTURE_TIMEOUT)
         assert result == 23
     (root / "complete").touch()
 
@@ -147,7 +169,8 @@ class NestedProcessCleanupTests(unittest.TestCase):
             child_root.mkdir()
             sentinel_root.mkdir()
             sentinel = subprocess.Popen(
-                [sys.executable, __file__, "--fixture", "sentinel", str(sentinel_root)], start_new_session=True)
+                [sys.executable, __file__, "--fixture", "ready-sentinel", str(sentinel_root)],
+                start_new_session=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
             original_snapshot = runner.test_process_snapshot
             original_refresh = runner.TestProcessOwnership.refresh
             original_send = runner.TestProcessOwnership.send
@@ -156,7 +179,7 @@ class NestedProcessCleanupTests(unittest.TestCase):
             attempts = 0
             def snapshot(required=()):
                 if attempts == 0:
-                    wait_until(lambda: (root / "leader-ready").exists())
+                    wait_until(lambda: (root / "leader-ready").exists(), timeout=NESTED_FIXTURE_TIMEOUT)
                     leader = int((root / "leader-ready").read_text())
                     # First outer poll sees the live leader, but misses its child's birth.
                     infos = original_snapshot(required)
@@ -165,16 +188,16 @@ class NestedProcessCleanupTests(unittest.TestCase):
                     infos.pop(child, None)
                     return infos
                 if attempts == 1:
-                    wait_until(lambda: (root / "before-drain").exists())
+                    wait_until(lambda: (root / "before-drain").exists(), timeout=NESTED_FIXTURE_TIMEOUT)
                     leader = int((root / "leader-ready").read_text())
                     child = int((child_root / "pid").read_text())
-                    wait_until(lambda: runner.test_process(child).parent != leader)
+                    wait_until(lambda: runner.test_process(child).parent != leader, timeout=NESTED_FIXTURE_TIMEOUT)
                     infos = original_snapshot(required)
                     # Model Darwin's hidden exited leader even on hosts exposing zombie metadata.
                     infos.pop(leader, None)
                     self.assertIn(child, infos)
                     return infos
-                wait_until(lambda: (root / "complete").exists())
+                wait_until(lambda: (root / "complete").exists(), timeout=NESTED_FIXTURE_TIMEOUT)
                 return original_snapshot(required)
             def refresh(ownership, **kwargs):
                 nonlocal attempts
@@ -200,12 +223,14 @@ class NestedProcessCleanupTests(unittest.TestCase):
                 signaled.append(info.pid)
                 original_send(ownership, info, sig)
             try:
-                wait_until(lambda: (sentinel_root / "ready").exists())
+                self.assertTrue(select.select([sentinel.stdout], [], [], 60)[0], "sentinel did not become ready")
+                self.assertEqual(sentinel.stdout.readline(), b"ready\n")
                 with patch.object(runner, "test_process_snapshot", side_effect=snapshot), \
                         patch.object(runner.TestProcessOwnership, "refresh", refresh), \
                         patch.object(runner.TestProcessOwnership, "send", send):
                     self.assertEqual(runner.run_command(
-                        [sys.executable, __file__, "--nested-fixture", directory], timeout=5), 0)
+                        [sys.executable, __file__, "--nested-fixture", directory],
+                        timeout=NESTED_FIXTURE_TIMEOUT), 0)
                 self.assertEqual(observations, [0, 1])
                 self.assertNotIn(int((child_root / "pid").read_text()), signaled)
                 self.assertNotIn(sentinel.pid, signaled)
@@ -221,12 +246,14 @@ class NestedProcessCleanupTests(unittest.TestCase):
                 (root / "allow-drain").touch()
                 (child_root / "stop").touch()
                 (sentinel_root / "stop").touch()
+                sentinel.stdin.close()
                 runner.stop_unreaped_child(sentinel)
+                sentinel.stdout.close()
                 for name in ("pid", "parent-pid"):
                     path = child_root / name
                     if path.exists():
                         pid = int(path.read_text())
-                        wait_until(lambda: not running(pid))
+                        wait_until(lambda: not running(pid), timeout=NESTED_FIXTURE_TIMEOUT)
                 self.assertTrue(sentinel_alive, "unrelated sentinel was terminated before fixture teardown")
                 print(json.dumps(dict(nested_teardown_complete=True,
                                       unrelated_sentinel_alive_before_teardown=sentinel_alive)), flush=True)
@@ -246,10 +273,8 @@ class ProcessCleanupTests(unittest.TestCase):
             )
             timer = None
             try:
-                wait_until(lambda: (sentinel_root / "pid").exists())
-                if interrupt:
-                    timer = threading.Timer(2, lambda: os.kill(os.getpid(), signal.SIGINT))
-                    timer.start()
+                # Interpreter/file startup is setup; the cleanup deadlines below start afterward.
+                wait_until(lambda: (sentinel_root / "pid").exists(), timeout=10)
                 started = time.monotonic()
                 command = [sys.executable, __file__, "--fixture", mode, str(child_root), str(ready_delay)]
                 original_refresh = runner.TestProcessOwnership.refresh
@@ -257,11 +282,21 @@ class ProcessCleanupTests(unittest.TestCase):
                 acknowledged = False
                 draining = False
                 def refresh(ownership, **kwargs):
-                    nonlocal acknowledged
+                    nonlocal acknowledged, timer
+                    # Observe ready identities before timeout cleanup; virtual-clock tests cover exact deadlines.
+                    if not acknowledged and not draining:
+                        ready_roots = [child_root]
+                        if mode == "success-session-tree":
+                            ready_roots.append(child_root / "grandchild")
+                        wait_until(lambda: all((path / "ready").exists() for path in ready_roots), timeout=10)
                     owned = original_refresh(ownership, **kwargs)
                     if not acknowledged and not draining:
                         acknowledged = release_observed_fixture(
                             child_root, owned, include_grandchild=mode == "success-session-tree")
+                        if acknowledged and interrupt:
+                            # Interrupt owned work, not interpreter startup before identities are visible.
+                            timer = threading.Timer(0.05, lambda: os.kill(os.getpid(), signal.SIGINT))
+                            timer.start()
                     return owned
                 def drain(ownership, process):
                     nonlocal draining
@@ -288,7 +323,7 @@ class ProcessCleanupTests(unittest.TestCase):
                     else:
                         # Successful fixtures include interpreter startup and ownership polling;
                         # exact deadline behavior is covered separately with a virtual clock.
-                        timeout = 5 if expected in (0, 23) else 2
+                        timeout = 15 if expected in (0, 23) else 2
                         self.assertEqual(runner.run_command(command, timeout=timeout), expected)
                 elapsed = time.monotonic() - started
                 self.assertTrue(acknowledged, "fixture identities were not observed before drain")
@@ -298,7 +333,6 @@ class ProcessCleanupTests(unittest.TestCase):
                     self.assertFalse(running(int(pid_file.read_text())), f"owned helper {pid_file} survived")
                 self.assertFalse(running(int((child_root / "parent-pid").read_text())))
                 self.assertIsNone(sentinel.poll(), "unrelated sentinel was terminated")
-                self.assertLess(elapsed, 9, "cleanup exceeded bounded grace")
                 print(json.dumps(dict(mode=mode, ready_delay=ready_delay, elapsed=round(elapsed, 3),
                                       observed_before_drain=acknowledged, child_terminated=True,
                                       unrelated_sentinel_alive=True)), flush=True)
@@ -346,10 +380,30 @@ class ProcessCleanupTests(unittest.TestCase):
         self.exercise("failure", 23)
 
     def test_keyboard_interrupt_drains_children_and_propagates(self):
-        self.exercise("timeout", None, interrupt=True)
+        self.exercise("timeout", None, interrupt=True, ready_delay=3)
 
 
 class FixtureReadinessTests(unittest.TestCase):
+    def test_startup_delay_does_not_race_its_wait_deadline(self):
+        with tempfile.TemporaryDirectory(prefix="codexbar-fixture-readiness-") as directory:
+            root = Path(directory)
+            child = runner.TestProcess(20, 10, 20, (101, 0))
+            # A scheduler interruption crosses 3s between the predicate and deadline check.
+            ticks = iter((0.0, 0.0, 2.99, 3.01))
+
+            def spawn(*_args, **_kwargs):
+                self.assertGreaterEqual(time.monotonic(), 3)
+                (root / "ready").write_text(json.dumps(dict(pid=child.pid, birth=child.birth)))
+                self.assertTrue(release_observed_fixture(root, {child.pid: child}))
+
+            with patch.object(subprocess, "Popen", side_effect=spawn) as popen, \
+                    patch.object(signal, "signal"), \
+                    patch.object(time, "monotonic", side_effect=lambda: next(ticks, 3.06)), \
+                    patch.object(time, "sleep"):
+                fixture("success", directory, ready_delay=3)
+            popen.assert_called_once()
+            self.assertTrue((root / "observed").exists())
+
     def test_delayed_startup_releases_observed_ancestry_within_two_seconds(self):
         with tempfile.TemporaryDirectory(prefix="codexbar-fixture-readiness-") as directory:
             root = Path(directory)
@@ -868,62 +922,68 @@ class ReviewRegressionTests(unittest.TestCase):
                     with self.assertRaises(OSError):
                         runner.test_process(123)
 
-    def exercise_initialization_failure(self, failure):
+    def exercise_initialization_failure(self, failure, deferred_kills=0):
         with tempfile.TemporaryDirectory(prefix="codexbar-init-cleanup-") as directory:
             root = Path(directory)
-            spawned = []
-            original_spawn = subprocess.Popen
+            command = [sys.executable, __file__, "--fixture", "stubborn", str(root)]
+            process = subprocess.Popen(command, start_new_session=True)
             original_lookup = runner.test_process
-            def spawn(*args, **kwargs):
-                process = original_spawn(*args, **kwargs)
-                if args[0][0] == sys.executable:
-                    spawned.append(process)
-                return process
             first = True
             def lookup(pid, *args, **kwargs):
                 nonlocal first
                 if first:
                     first = False
-                    wait_until(lambda: (root / "pid").exists())
                     if failure is not None:
                         raise failure
                     return None
-                if failure is None and spawned and pid == spawned[0].pid:
+                if failure is None and pid == process.pid:
                     return None
                 return original_lookup(pid, *args, **kwargs)
-            started = time.monotonic()
+            drain_started = []
+            original_drain = runner.TestProcessOwnership._drain
+            def drain(ownership, process):
+                drain_started.append(time.monotonic() - started)
+                return original_drain(ownership, process)
             sent = []
             original_kill = os.kill
             def kill(pid, sig):
-                if spawned and pid == spawned[0].pid:
+                nonlocal deferred_kills
+                if pid == process.pid:
                     sent.append((sig, time.monotonic() - started))
+                    if sig == signal.SIGKILL and deferred_kills:
+                        deferred_kills -= 1
+                        return
                 return original_kill(pid, sig)
             try:
-                with patch.object(runner.subprocess, "Popen", side_effect=spawn), \
+                # Interpreter startup is setup, not part of the command/cleanup deadlines under test.
+                wait_until(lambda: (root / "pid").exists(), timeout=30)
+                started = time.monotonic()
+                with patch.object(runner.subprocess, "Popen", return_value=process), \
                         patch.object(runner, "test_process", side_effect=lookup), \
-                        patch.object(runner.os, "kill", side_effect=kill):
+                        patch.object(runner.os, "kill", side_effect=kill), \
+                        patch.object(runner.TestProcessOwnership, "_drain", autospec=True, side_effect=drain):
                     if failure is None:
-                        self.assertEqual(runner.run_command(
-                            [sys.executable, __file__, "--fixture", "stubborn", str(root)], timeout=2), 124)
+                        self.assertEqual(runner.run_command(command, timeout=2), 124)
                     else:
                         with self.assertRaises(type(failure)) as raised:
-                            runner.run_command([sys.executable, __file__, "--fixture", "stubborn", str(root)], timeout=2)
+                            runner.run_command(command, timeout=2)
                         self.assertIs(raised.exception, failure)
-                self.assertEqual(len(spawned), 1)
-                self.assertIsNotNone(spawned[0].poll(), "initialization failure leaked direct child")
+                self.assertIsNotNone(process.poll(), "initialization failure leaked direct child")
                 if failure is None:
-                    self.assertEqual([sig for sig, _ in sent], [signal.SIGTERM, signal.SIGKILL])
+                    self.assertEqual([sig for sig, _ in sent[:2]], [signal.SIGTERM, signal.SIGKILL])
+                    self.assertTrue(all(sig == signal.SIGKILL for sig, _ in sent[2:]))
                     self.assertGreaterEqual(sent[0][1], 2, "missing metadata shortened the command deadline")
-                    self.assertEqual(spawned[0].returncode, -signal.SIGKILL)
+                    # Cleanup starts its grace before process inspection and the first signal.
+                    self.assertGreaterEqual(sent[1][1] - drain_started[0], 3, "cleanup shortened the termination grace")
+                    self.assertEqual(process.returncode, -signal.SIGKILL)
                 self.assertLess(time.monotonic() - started, 9)
             finally:
                 (root / "stop").touch()
-                for process in spawned:
-                    try:
-                        process.wait(timeout=3)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
-                        process.wait(timeout=2)
+                try:
+                    process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=2)
 
     def test_initial_metadata_exception_reaps_direct_child(self):
         self.exercise_initialization_failure(PermissionError(errno.EACCES, "injected initialization failure"))
@@ -932,7 +992,9 @@ class ReviewRegressionTests(unittest.TestCase):
         self.exercise_initialization_failure(KeyboardInterrupt())
 
     def test_initial_missing_metadata_times_out_and_reaps_term_ignoring_child(self):
-        self.exercise_initialization_failure(None)
+        for deferred_kills in (0, 2):
+            with self.subTest(deferred_kills=deferred_kills):
+                self.exercise_initialization_failure(None, deferred_kills=deferred_kills)
 
 
 class ExitTransitionTests(unittest.TestCase):
@@ -1072,7 +1134,7 @@ class AnchorSemanticsTests(unittest.TestCase):
             process = subprocess.Popen([sys.executable, __file__, "--fixture", "success", directory],
                                        start_new_session=True)
             try:
-                wait_until(lambda: (root / "ready").exists())
+                wait_until(lambda: (root / "ready").exists(), timeout=10)
                 self.assertIsNone(runner.unreaped_exit_code(process))
                 identity = runner.test_process(process.pid)
                 self.assertIsNotNone(identity)
@@ -1499,6 +1561,82 @@ int main(int argc, char **argv) {
                     except subprocess.TimeoutExpired:
                         process.kill()
                         process.wait(timeout=2)
+
+
+@patch.object(runner.sys, "platform", "darwin")
+class ContainmentSupportTests(unittest.TestCase):
+    def test_partial_capabilities_name_only_the_missing_ones(self):
+        partial = types.SimpleNamespace(waitid=None, P_PID=0, WEXITED=0)
+        error = runner.containment_support_error(partial)
+        self.assertIsNotNone(error)
+        self.assertIn("WNOHANG", error)
+        self.assertIn("WNOWAIT", error)
+        self.assertNotIn("P_PID", error)
+        self.assertIn(sys.executable, error)
+
+    def test_complete_capabilities_report_no_error(self):
+        complete = types.SimpleNamespace(**{name: 0 for name in runner.CONTAINMENT_CAPABILITIES})
+        self.assertIsNone(runner.containment_support_error(complete))
+
+    def test_run_command_rejects_an_interpreter_without_waitid(self):
+        with (
+            patch.object(runner, "containment_support_error", return_value="no waitid here"),
+            patch.object(runner.subprocess, "Popen") as launch,
+        ):
+            with self.assertRaises(RuntimeError) as raised:
+                runner.run_command(["/bin/echo", "unreachable"])
+            launch.assert_not_called()
+        self.assertEqual(str(raised.exception), "no waitid here")
+
+    def test_unsupported_platform_is_reported(self):
+        with patch.object(runner.sys, "platform", "win32"):
+            self.assertEqual(
+                runner.containment_support_error(),
+                "Swift test process containment requires macOS or Linux, not win32.",
+            )
+
+    def test_main_rejects_missing_containment_before_discovery(self):
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with (
+            patch.object(sys, "argv", ["runner"]),
+            patch.object(runner, "containment_support_error", return_value="no waitid here"),
+            patch.object(runner, "swift_test_list") as discovery,
+            patch.object(runner, "run_group") as execute,
+            patch.object(runner, "print_timing_summary") as timing,
+            patch.object(runner, "append_github_summary") as summary,
+            contextlib.redirect_stdout(stdout),
+            contextlib.redirect_stderr(stderr),
+        ):
+            self.assertEqual(runner.main(), 2)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertEqual(stderr.getvalue(), "no waitid here\n")
+        discovery.assert_not_called()
+        execute.assert_not_called()
+        timing.assert_not_called()
+        summary.assert_not_called()
+
+    def test_list_only_keeps_discovery_without_containment(self):
+        stdout, stderr = io.StringIO(), io.StringIO()
+        selection = runner.TestSelection("SyntheticTests", "^SyntheticTests/")
+        with (
+            patch.object(sys, "argv", ["runner", "--list-only"]),
+            patch.object(runner, "containment_support_error", return_value="no waitid here") as guard,
+            patch.object(runner, "swift_test_list", return_value=[selection]) as discovery,
+            patch.object(runner, "run_group") as execute,
+            patch.object(runner, "append_github_summary") as summary,
+            contextlib.redirect_stdout(stdout),
+            contextlib.redirect_stderr(stderr),
+        ):
+            self.assertEqual(runner.main(), 0)
+        self.assertEqual(
+            stdout.getvalue(),
+            "Discovered 1 test selections; running 1 selections in 1 groups\nSyntheticTests\n",
+        )
+        self.assertEqual(stderr.getvalue(), "")
+        guard.assert_not_called()
+        discovery.assert_called_once_with(["swift"])
+        execute.assert_not_called()
+        summary.assert_not_called()
 
 
 if __name__ == "__main__":

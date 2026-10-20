@@ -33,20 +33,11 @@ struct ProviderSettingsToggleRowView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                let actions = self.toggle.actions.filter { $0.isVisible?() ?? true }
-                if !actions.isEmpty {
-                    HStack(spacing: 10) {
-                        ForEach(actions) { action in
-                            Button(L(action.title)) {
-                                Task { @MainActor in
-                                    await action.perform()
-                                }
-                            }
-                            .applyProviderSettingsButtonStyle(action.style)
-                            .controlSize(.small)
-                        }
-                    }
+                ForEach(self.toggle.inlineFields.filter { $0.isVisible?() ?? true }) { field in
+                    ProviderSettingsFieldRowView(field: field, inline: true)
                 }
+
+                ProviderSettingsButtonsView(actions: self.toggle.actions)
             }
         }
         .disabled(!isEnabled)
@@ -60,6 +51,29 @@ struct ProviderSettingsToggleRowView: View {
             guard self.toggle.binding.wrappedValue else { return }
             guard let onAppear = self.toggle.onAppearWhenEnabled else { return }
             await onAppear()
+        }
+    }
+}
+
+@MainActor
+struct ProviderSettingsButtonsView: View {
+    let actions: [ProviderSettingsActionDescriptor]
+    var spacing: CGFloat = 10
+
+    var body: some View {
+        let visible = self.actions.filter { $0.isVisible?() ?? true }
+        if !visible.isEmpty {
+            HStack(spacing: self.spacing) {
+                ForEach(visible) { action in
+                    Button(L(action.title)) {
+                        Task { @MainActor in
+                            await action.perform()
+                        }
+                    }
+                    .applyProviderSettingsButtonStyle(action.style)
+                    .controlSize(.small)
+                }
+            }
         }
     }
 }
@@ -82,16 +96,7 @@ struct ProviderSettingsPickerRowView: View {
                         .truncationMode(.tail)
                 }
 
-                let visibleActions = self.picker.trailingActions.filter { $0.isVisible?() ?? true }
-                ForEach(visibleActions) { action in
-                    Button(L(action.title)) {
-                        Task { @MainActor in
-                            await action.perform()
-                        }
-                    }
-                    .applyProviderSettingsButtonStyle(action.style)
-                    .controlSize(.small)
-                }
+                ProviderSettingsButtonsView(actions: self.picker.trailingActions, spacing: 8)
 
                 Picker("", selection: self.picker.binding) {
                     ForEach(self.picker.options) { option in
@@ -123,26 +128,27 @@ struct ProviderSettingsPickerRowView: View {
 @MainActor
 struct ProviderSettingsFieldRowView: View {
     let field: ProviderSettingsFieldDescriptor
+    var inline = false
 
     var body: some View {
+        if self.inline {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L(self.field.title))
+                self.fieldView.textFieldStyle(.roundedBorder)
+                ProviderSettingsButtonsView(actions: self.field.actions)
+                self.footerView
+            }
+        } else {
+            self.section.textFieldStyle(.plain)
+        }
+    }
+
+    private var section: some View {
         let trimmedTitle = self.field.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        Section {
+        return Section {
             self.fieldView
 
-            let actions = self.field.actions.filter { $0.isVisible?() ?? true }
-            if !actions.isEmpty {
-                HStack(spacing: 10) {
-                    ForEach(actions) { action in
-                        Button(L(action.title)) {
-                            Task { @MainActor in
-                                await action.perform()
-                            }
-                        }
-                        .applyProviderSettingsButtonStyle(action.style)
-                        .controlSize(.small)
-                    }
-                }
-            }
+            ProviderSettingsButtonsView(actions: self.field.actions)
         } header: {
             if !trimmedTitle.isEmpty {
                 Text(L(trimmedTitle))
@@ -167,8 +173,6 @@ struct ProviderSettingsFieldRowView: View {
             }
         }
         .labelsHidden()
-        .textFieldStyle(.plain)
-        .onTapGesture { self.field.onActivate?() }
     }
 
     @ViewBuilder
@@ -206,20 +210,7 @@ struct ProviderSettingsActionsRowView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            let actions = self.descriptor.actions.filter { $0.isVisible?() ?? true }
-            if !actions.isEmpty {
-                HStack(spacing: 10) {
-                    ForEach(actions) { action in
-                        Button(L(action.title)) {
-                            Task { @MainActor in
-                                await action.perform()
-                            }
-                        }
-                        .applyProviderSettingsButtonStyle(action.style)
-                        .controlSize(.small)
-                    }
-                }
-            }
+            ProviderSettingsButtonsView(actions: self.descriptor.actions)
         }
     }
 }
@@ -248,7 +239,11 @@ struct ProviderSettingsTokenAccountsRowView: View {
     @State private var newOrgID: String = ""
     @State private var newProjectID: String = ""
     @State private var newTeamMode = false
+    @State private var newClaudeConfigDirectory: String?
     @State private var teamDrafts: [UUID: TeamAccountDraft] = [:]
+    @State private var editingAccountID: UUID?
+    @State private var editLabel = ""
+    @State private var editToken = ""
 
     var body: some View {
         Section {
@@ -282,14 +277,47 @@ struct ProviderSettingsTokenAccountsRowView: View {
                             }
                             .buttonStyle(.plain)
 
+                            if self.descriptor.primaryAddAction == nil, self.descriptor.editAccount != nil {
+                                Button(L("Edit")) {
+                                    self.editingAccountID = account.id
+                                    self.editLabel = account.label
+                                    self.editToken = ""
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            }
+                            if let move = self.descriptor.moveAccount {
+                                Button {
+                                    move(account.id, index - 1)
+                                } label: {
+                                    Image(systemName: "chevron.up")
+                                }
+                                .help(L("Move up"))
+                                .accessibilityLabel(L("Move up"))
+                                .disabled(index == 0)
+                                Button {
+                                    move(account.id, index + 1)
+                                } label: {
+                                    Image(systemName: "chevron.down")
+                                }
+                                .help(L("Move down"))
+                                .accessibilityLabel(L("Move down"))
+                                .disabled(index == accounts.count - 1)
+                            }
                             Button(L("Remove")) {
                                 self.descriptor.removeAccount(account.id)
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
                         }
+                        if self.editingAccountID == account.id {
+                            self.accountEditor(account: account)
+                        }
                         if self.descriptor.showsTeamModeControls {
                             self.teamModeEditor(account: account)
+                        }
+                        if let directory = self.descriptor.claudeConfigDirectory {
+                            TokenAccountDirectoryPicker(path: directory(account.id))
                         }
                     }
                 }
@@ -334,12 +362,14 @@ struct ProviderSettingsTokenAccountsRowView: View {
                                 token,
                                 usageScope,
                                 accountOrganizationID,
-                                accountWorkspaceID)
+                                accountWorkspaceID,
+                                self.descriptor.claudeConfigDirectory == nil ? nil : self.newClaudeConfigDirectory)
                             self.newLabel = ""
                             self.newToken = ""
                             self.newOrgID = ""
                             self.newProjectID = ""
                             self.newTeamMode = false
+                            self.newClaudeConfigDirectory = nil
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
@@ -349,6 +379,9 @@ struct ProviderSettingsTokenAccountsRowView: View {
                             showsTeamModeControls: self.descriptor.showsTeamModeControls,
                             teamMode: self.newTeamMode,
                             teamContext: (organizationID: self.newOrgID, projectID: self.newProjectID)))
+                    }
+                    if self.descriptor.claudeConfigDirectory != nil {
+                        TokenAccountDirectoryPicker(path: self.$newClaudeConfigDirectory)
                     }
                     if self.descriptor.showsOrganizationField {
                         TextField(text: self.$newOrgID, prompt: Text(L("Org ID (optional)"))) {
@@ -417,6 +450,31 @@ struct ProviderSettingsTokenAccountsRowView: View {
                 SettingsSectionFooter(L(self.descriptor.subtitle))
             }
         }
+    }
+
+    private func accountEditor(account: ProviderTokenAccount) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField(L("Label"), text: self.$editLabel)
+            SecureField(L(self.descriptor.placeholder), text: self.$editToken)
+            Text(L("Leave blank to keep the saved credential."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                Button(L("Save")) {
+                    let token = self.editToken.trimmingCharacters(in: .whitespacesAndNewlines)
+                    self.descriptor.editAccount?(account.id, self.editLabel, token.isEmpty ? nil : token)
+                    self.editingAccountID = nil
+                    self.editToken = ""
+                }
+                .disabled(self.editLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button(L("Cancel")) {
+                    self.editingAccountID = nil
+                    self.editToken = ""
+                }
+            }
+        }
+        .textFieldStyle(.roundedBorder)
+        .padding(.leading, 24)
     }
 
     private func isActive(index: Int, accountCount: Int) -> Bool {

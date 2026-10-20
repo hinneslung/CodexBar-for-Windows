@@ -4,7 +4,7 @@ import SwiftUI
 
 @MainActor
 enum ProviderSettingsRefreshInteraction {
-    static func perform(operation: () async -> Void) async {
+    static func perform<Result>(operation: () async -> Result) async -> Result {
         await BrowserCookieAccessGate.withExplicitRetry {
             await ProviderInteractionContext.$current.withValue(.userInitiated) {
                 await operation()
@@ -53,16 +53,40 @@ struct ProvidersPane: View {
     }
 
     var body: some View {
+        let unfilteredModel = UsageMenuCardView.Model.make(self.store.menuCardInput(
+            for: self.provider, context: .settings))
+        // Provider-specific by design: only Codex has managed OAuth account snapshots for this shared settings view.
+        let overview = self.provider == .codex ? self.store.codexAccountUsageOverview { accountIDs in
+            Task { @MainActor in
+                await ProviderSettingsRefreshInteraction.perform {
+                    await self.store.refreshCodexAccountsForSettings(accountIDs)
+                }
+            }
+        } : nil
+        let visibilityModel = UsageMenuCardView.Model.make(self.store.menuCardInput(
+            for: self.provider, context: .settings, optionalUsageOverride: true))
+        let usageItems = ((overview?.usageItems ?? []) + visibilityModel.usageItemDescriptors(
+            includingHidden: self.settings.hiddenUsageItemIDs(for: self.provider),
+            hidePersonalInfo: self.settings.hidePersonalInfo))
+            .reduce(into: [ProviderUsageItemDescriptor]()) { items, item in
+                if !items.contains(where: { $0.id == item.id }) { items.append(item) }
+            }
         ProviderDetailView(
             provider: self.provider,
             store: self.store,
             isEnabled: self.binding(for: self.provider),
-            subtitle: self.providerSubtitle(self.provider),
-            model: self.menuCardModel(for: self.provider),
+            subtitle: overview.map { L("%@ accounts", String($0.rows.count)) }
+                ?? self.providerSubtitle(self.provider),
+            model: unfilteredModel.applyingUsageItemVisibility(
+                hiddenItemIDs: self.settings.hiddenUsageItemIDs(for: self.provider)),
+            accountUsageOverview: overview,
+            usageItems: usageItems,
             openAIWebDiagnostic: self.openAIWebDiagnostic(for: self.provider),
             settingsPickers: self.extraSettingsPickers(for: self.provider),
             settingsToggles: self.extraSettingsToggles(for: self.provider),
             settingsFields: self.extraSettingsFields(for: self.provider),
+            settingsDirectoryLists: self.extraSettingsDirectoryLists(for: self.provider),
+            settingsModelLimits: self.extraSettingsModelLimits(for: self.provider),
             settingsActions: self.extraSettingsActions(for: self.provider),
             settingsTokenAccounts: self.tokenAccountDescriptor(for: self.provider),
             settingsOrganizations: self.extraSettingsOrganizations(for: self.provider),
@@ -135,18 +159,27 @@ struct ProvidersPane: View {
         query: String,
         displayName: (UsageProvider) -> String) -> [UsageProvider]
     {
-        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedQuery.isEmpty else { return providers }
-
+        let words = query.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard !words.isEmpty else { return providers }
         return providers.filter { provider in
-            displayName(provider).localizedCaseInsensitiveContains(trimmedQuery)
-                || provider.rawValue.localizedCaseInsensitiveContains(trimmedQuery)
+            let descriptor = ProviderDescriptorRegistry.descriptor(for: provider)
+            let fields = [
+                displayName(provider),
+                descriptor.metadata.shortDisplayName,
+                provider.rawValue,
+                descriptor.cli.name,
+            ] + descriptor.cli.aliases
+            return words.allSatisfy { word in
+                fields.contains { $0.range(of: word, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+            }
         }
     }
 
     func moveProviders(fromOffsets: IndexSet, toOffset: Int) {
-        guard !self.settings.providersSortedAlphabetically else { return }
-        self.settings.moveProvider(fromOffsets: fromOffsets, toOffset: toOffset)
+        self.settings.moveVisibleProviders(
+            self.settings.orderedFirstPartyProviders().map(\.instanceID),
+            fromOffsets: fromOffsets,
+            toOffset: toOffset)
     }
 
     private func triggerRefresh(for provider: UsageProvider) {
@@ -264,8 +297,11 @@ struct ProvidersPane: View {
         }
 
         let result = await self.codexAccountPromotionCoordinator.promote(managedAccountID: managedAccountID)
-        if case let .failure(error) = result {
+        switch result {
+        case let .failure(error):
             self.codexAccountsNotice = CodexAccountsSectionNotice(text: error.message, tone: .warning)
+        case let .success(promotion):
+            self.codexAccountsNotice = promotion.daemonRestartNote.map { .init(text: $0, tone: .warning) }
         }
     }
 
@@ -286,10 +322,15 @@ struct ProvidersPane: View {
 
     func reauthenticateCodexAccount(_ account: CodexVisibleAccount) async {
         self.codexAccountsNotice = nil
-        if let accountID = account.storedAccountID {
-            guard let state = self.codexAccountsSectionState(for: .codex), state.canReauthenticate(account) else {
-                return
-            }
+        self.settings.invalidateCodexAccountReconciliationSnapshotCache()
+        guard let state = self.codexAccountsSectionState(for: .codex),
+              let current = state.visibleAccounts.first(where: { $0.id == account.id }),
+              current.selectionSource == account.selectionSource,
+              current.storedAccountID == account.storedAccountID,
+              current.workspaceAccountID == account.workspaceAccountID,
+              state.canReauthenticate(current)
+        else { return }
+        if case let .managedAccount(accountID) = current.selectionSource {
             do {
                 _ = try await self.managedCodexAccountCoordinator
                     .authenticateManagedAccount(existingAccountID: accountID)
@@ -300,9 +341,7 @@ struct ProvidersPane: View {
             return
         }
 
-        guard let state = self.codexAccountsSectionState(for: .codex), state.canReauthenticate(account) else {
-            return
-        }
+        guard current.selectionSource == .liveSystem else { return }
 
         self.isAuthenticatingLiveCodexAccount = true
         self.codexAccountPromotionCoordinator.setLiveReauthenticationInProgress(true)
@@ -376,6 +415,16 @@ struct ProvidersPane: View {
             .filter { $0.isVisible?() ?? true }
     }
 
+    private func extraSettingsModelLimits(for provider: UsageProvider) -> [ProviderSettingsModelLimitsDescriptor] {
+        ProviderCatalog.implementation(for: provider)?
+            .settingsModelLimits(context: self.makeSettingsContext(provider: provider)) ?? []
+    }
+
+    private func extraSettingsDirectoryLists(for provider: UsageProvider) -> [ProviderSettingsDirectoryListDescriptor] {
+        ProviderCatalog.implementation(for: provider)?
+            .settingsDirectoryLists(context: self.makeSettingsContext(provider: provider)) ?? []
+    }
+
     private func extraSettingsActions(for provider: UsageProvider) -> [ProviderSettingsActionsDescriptor] {
         guard let impl = ProviderCatalog.implementation(for: provider) else { return [] }
         let context = self.makeSettingsContext(provider: provider)
@@ -395,7 +444,7 @@ struct ProvidersPane: View {
         guard let support = TokenAccountSupportCatalog.support(for: provider) else { return nil }
         let context = self.makeSettingsContext(provider: provider)
         let implementation = ProviderCatalog.implementation(for: provider)
-        return ProviderSettingsTokenAccountsDescriptor(
+        var descriptor = ProviderSettingsTokenAccountsDescriptor(
             id: "token-accounts-\(provider.rawValue)",
             title: support.title,
             subtitle: support.subtitle,
@@ -422,14 +471,15 @@ struct ProvidersPane: View {
             },
             showsOrganizationField: support.showsOrganizationField,
             showsTeamModeControls: support.showsTeamModeControls,
-            addAccount: { label, token, usageScope, organizationID, workspaceID in
+            addAccount: { label, token, usageScope, organizationID, workspaceID, claudeConfigDirectory in
                 self.settings.addTokenAccount(
                     provider: provider,
                     label: label,
                     token: token,
                     usageScope: usageScope,
                     organizationID: organizationID,
-                    workspaceID: workspaceID)
+                    workspaceID: workspaceID,
+                    claudeConfigDirectory: claudeConfigDirectory)
                 Task { @MainActor in
                     await ProviderInteractionContext.$current.withValue(.userInitiated) {
                         await self.store.refreshProvider(provider, allowDisabled: true)
@@ -478,6 +528,26 @@ struct ProvidersPane: View {
                     }
                 }
             })
+        descriptor.editAccount = { accountID, label, token in
+            self.settings.updateTokenAccount(provider: provider, accountID: accountID, label: label, token: token)
+        }
+        descriptor.moveAccount = { accountID, destination in
+            self.settings.moveTokenAccount(provider: provider, accountID: accountID, to: destination)
+        }
+        // Provider-specific by design: only Claude accounts declare local transcript ownership.
+        if provider == .claude {
+            descriptor.claudeConfigDirectory = { accountID in
+                Binding(
+                    get: { self.settings.tokenAccounts(for: provider)
+                        .first(where: { $0.id == accountID })?.claudeConfigDirectory
+                    },
+                    set: { directory in
+                        self.settings.updateTokenAccount(
+                            provider: provider, accountID: accountID, claudeConfigDirectory: .some(directory))
+                    })
+            }
+        }
+        return descriptor
     }
 
     private func makeSettingsContext(provider: UsageProvider) -> ProviderSettingsContext {
@@ -485,16 +555,6 @@ struct ProvidersPane: View {
             provider: provider,
             settings: self.settings,
             store: self.store,
-            boolBinding: { keyPath in
-                Binding(
-                    get: { self.settings[keyPath: keyPath] },
-                    set: { self.settings[keyPath: keyPath] = $0 })
-            },
-            stringBinding: { keyPath in
-                Binding(
-                    get: { self.settings[keyPath: keyPath] },
-                    set: { self.settings[keyPath: keyPath] = $0 })
-            },
             statusText: { id in
                 self.settingsStatusTextByID[id]
             },
@@ -523,105 +583,6 @@ struct ProvidersPane: View {
             })
     }
 
-    func menuCardModel(for provider: UsageProvider) -> UsageMenuCardView.Model {
-        let metadata = self.store.metadata(for: provider)
-        let snapshot = self.store.presentationSnapshot(for: provider)
-        let now = Date()
-        let codexProjection = self.store.codexConsumerProjectionIfNeeded(
-            for: provider,
-            surface: .liveCard,
-            now: now)
-        let credits: CreditsSnapshot?
-        let creditsError: String?
-        let dashboard: OpenAIDashboardSnapshot?
-        let dashboardError: String?
-        let tokenSnapshot: CostUsageTokenSnapshot?
-        let tokenError: String?
-        if let codexProjection {
-            credits = codexProjection.credits?.snapshot
-            creditsError = codexProjection.credits?.userFacingError
-            dashboard = nil
-            dashboardError = codexProjection.userFacingErrors.dashboard
-            tokenSnapshot = self.store.tokenSnapshot(for: provider)
-            tokenError = self.store.tokenError(for: provider)
-        } else if ProviderDescriptorRegistry.descriptor(for: provider).tokenCost.supportsTokenCost {
-            credits = nil
-            creditsError = nil
-            dashboard = nil
-            dashboardError = nil
-            tokenSnapshot = self.store.tokenSnapshot(for: provider)
-            tokenError = self.store.tokenError(for: provider)
-        } else {
-            credits = nil
-            creditsError = nil
-            dashboard = nil
-            dashboardError = nil
-            tokenSnapshot = nil
-            tokenError = nil
-        }
-
-        let paceWindow = snapshot.flatMap {
-            ProviderDescriptorRegistry.descriptor(for: provider).presentation.semanticWindows(snapshot: $0).weekly
-        }
-        let weeklyPace = if let codexProjection,
-                            let weekly = codexProjection.rateWindow(for: .weekly)
-        {
-            self.store.weeklyPace(
-                provider: provider,
-                window: weekly,
-                dataConfidence: snapshot?.dataConfidence ?? .unknown,
-                now: now)
-        } else {
-            paceWindow.flatMap { window in
-                self.store.weeklyPace(
-                    provider: provider,
-                    window: window,
-                    dataConfidence: snapshot?.dataConfidence ?? .unknown,
-                    now: now)
-            }
-        }
-        let input = UsageMenuCardView.Model.Input(
-            provider: provider,
-            metadata: metadata,
-            snapshot: snapshot,
-            codexProjection: codexProjection,
-            credits: credits,
-            creditsError: creditsError,
-            dashboard: dashboard,
-            dashboardError: dashboardError,
-            tokenSnapshot: tokenSnapshot,
-            tokenError: tokenError,
-            account: self.store.accountInfo(for: provider),
-            isRefreshing: self.store.refreshingProviders.contains(provider.instanceID),
-            lastError: codexProjection?.userFacingErrors.usage ?? self.store.userFacingError(for: provider),
-            limitsAvailability: self.store.knownLimitsAvailability(for: provider),
-            usageBarsShowUsed: self.settings.usageBarsShowUsed,
-            resetTimeDisplayStyle: self.settings.resetTimeDisplayStyle,
-            tokenCostUsageEnabled: self.settings.isCostUsageEffectivelyEnabled(for: provider),
-            codexLocalSessionCostLedgerEnabled: self.settings.codexLocalSessionCostLedgerEnabled,
-            // Display style only controls the main menu. Provider details always expose
-            // available cost data in their Usage section.
-            costSummaryInlineEnabled: true,
-            tokenCostMenuSectionEnabled: self.settings.isCostUsageEffectivelyEnabled(for: provider),
-            showOptionalCreditsAndExtraUsage: self.settings.showOptionalCreditsAndExtraUsage,
-            claudeDailyRoutinesUsageVisible: self.settings.claudeDailyRoutinesUsageVisible,
-            codexSparkUsageVisible: self.settings.codexSparkUsageVisible,
-            copilotBudgetExtrasEnabled: self.settings.copilotBudgetExtrasEnabled,
-            showsAllUsageLanes: true,
-            hidePersonalInfo: self.settings.hidePersonalInfo,
-            weeklyPace: weeklyPace,
-            quotaWarningThresholds: [
-                .session: self.quotaWarningMarkerThresholds(provider: provider, window: .session),
-                .weekly: self.quotaWarningMarkerThresholds(provider: provider, window: .weekly),
-            ],
-            workDaysPerWeek: self.settings.weeklyProgressWorkDays,
-            workdayTickAppearance: self.settings.workdayTickAppearance,
-            paceVisible: self.settings.paceVisible,
-            costUsageBucketCalendar: self.settings.costUsageBucketCalendar,
-            now: now)
-        return UsageMenuCardView.Model.make(input)
-    }
-
     func openAIWebDiagnostic(for provider: UsageProvider) -> String? {
         // Provider-specific by design: the OpenAI dashboard diagnostic comes from Codex's app-only web session.
         guard provider == .codex else { return nil }
@@ -629,12 +590,6 @@ struct ProvidersPane: View {
             for: provider,
             surface: .liveCard)?.userFacingErrors.dashboard
         return PersonalInfoRedactor.redactEmails(in: diagnostic, isEnabled: self.settings.hidePersonalInfo)
-    }
-
-    private func quotaWarningMarkerThresholds(provider: UsageProvider, window: QuotaWarningWindow) -> [Int] {
-        guard self.settings.quotaWarningMarkersVisible else { return [] }
-        guard self.settings.quotaWarningEnabled(provider: provider, window: window) else { return [] }
-        return self.settings.resolvedQuotaWarningThresholds(provider: provider, window: window)
     }
 
     private func refreshCodexProvider() async {

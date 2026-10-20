@@ -85,11 +85,11 @@ extension UsageStore {
                     minimumExpectedPercent: minimumExpectedPercent,
                     minimumElapsedPercent: minimumElapsedPercent)
             }
-            .flatMap { MenuBarDisplayText.paceText(pace: $0) }
+            .flatMap { MenuBarDisplayText.paceText(pace: $0, reservePositive: self.settings.menuBarPaceReservePositive)
+            }
     }
 
-    /// Numeric twin of `menuBarLayoutPaceText`, rounded to whole percentage points like the text so a
-    /// conditional predicate always compares exactly the value the menu bar shows.
+    /// Rounded usage-ahead delta for colors and conditional predicates, independent of the display sign.
     func menuBarLayoutPaceDelta(
         provider: UsageProvider,
         window: RateWindow?,
@@ -164,15 +164,7 @@ extension UsageStore {
                 window: weekly,
                 sampledAt: sampledAt,
                 accountKey: ownership.canonicalKey)
-            let dataset = await historyStore.loadCodexDataset(
-                canonicalAccountKey: ownership.canonicalKey,
-                canonicalEmailHashKey: ownership.hasAdjacentEmailScopeAmbiguity
-                    ? nil
-                    : ownership.canonicalEmailHashKey,
-                legacyEmailHash: ownership.hasAdjacentEmailScopeAmbiguity
-                    ? nil
-                    : ownership.historicalLegacyEmailHash,
-                hasAdjacentMultiAccountVeto: ownership.hasAdjacentMultiAccountVeto)
+            let dataset = await Self.loadHistoricalDataset(from: historyStore, ownership: ownership)
             await MainActor.run { [weak self] in
                 self?.setCodexHistoricalDataset(dataset, accountKey: ownership.canonicalKey)
             }
@@ -185,15 +177,7 @@ extension UsageStore {
             return
         }
         let ownership = self.codexOwnershipContext()
-        let dataset = await self.historicalUsageHistoryStore.loadCodexDataset(
-            canonicalAccountKey: ownership.canonicalKey,
-            canonicalEmailHashKey: ownership.hasAdjacentEmailScopeAmbiguity
-                ? nil
-                : ownership.canonicalEmailHashKey,
-            legacyEmailHash: ownership.hasAdjacentEmailScopeAmbiguity
-                ? nil
-                : ownership.historicalLegacyEmailHash,
-            hasAdjacentMultiAccountVeto: ownership.hasAdjacentMultiAccountVeto)
+        let dataset = await Self.loadHistoricalDataset(from: self.historicalUsageHistoryStore, ownership: ownership)
         self.setCodexHistoricalDataset(dataset, accountKey: ownership.canonicalKey)
         if let dashboard = self.openAIDashboard {
             let authority = self.evaluateCodexDashboardAuthority(
@@ -252,19 +236,22 @@ extension UsageStore {
                 referenceWindow: referenceWindow,
                 now: calibrationAt,
                 accountKey: ownership.canonicalKey)
-            let dataset = await historyStore.loadCodexDataset(
-                canonicalAccountKey: ownership.canonicalKey,
-                canonicalEmailHashKey: ownership.hasAdjacentEmailScopeAmbiguity
-                    ? nil
-                    : ownership.canonicalEmailHashKey,
-                legacyEmailHash: ownership.hasAdjacentEmailScopeAmbiguity
-                    ? nil
-                    : ownership.historicalLegacyEmailHash,
-                hasAdjacentMultiAccountVeto: ownership.hasAdjacentMultiAccountVeto)
+            let dataset = await Self.loadHistoricalDataset(from: historyStore, ownership: ownership)
             await MainActor.run { [weak self] in
                 self?.setCodexHistoricalDataset(dataset, accountKey: ownership.canonicalKey)
             }
         }
+    }
+
+    private nonisolated static func loadHistoricalDataset(
+        from historyStore: HistoricalUsageHistoryStore,
+        ownership: CodexOwnershipContext) async -> CodexHistoricalDataset?
+    {
+        await historyStore.loadCodexDataset(
+            canonicalAccountKey: ownership.canonicalKey,
+            canonicalEmailHashKey: ownership.hasAdjacentEmailScopeAmbiguity ? nil : ownership.canonicalEmailHashKey,
+            legacyEmailHash: ownership.hasAdjacentEmailScopeAmbiguity ? nil : ownership.historicalLegacyEmailHash,
+            hasAdjacentMultiAccountVeto: ownership.hasAdjacentMultiAccountVeto)
     }
 
     private func setCodexHistoricalDataset(_ dataset: CodexHistoricalDataset?, accountKey: String?) {

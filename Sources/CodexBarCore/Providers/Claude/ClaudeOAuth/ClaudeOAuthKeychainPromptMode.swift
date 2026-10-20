@@ -103,6 +103,10 @@ public enum ClaudeOAuthKeychainPromptPreference {
     }
 
     static var applicationUserDefaults: UserDefaults {
+        self.userDefaults(or: ClaudeOAuthApplicationDefaults.resolve(domain: self.applicationDefaultsDomain))
+    }
+
+    static func userDefaults(or fallback: @autoclosure () -> UserDefaults) -> UserDefaults {
         #if DEBUG
         if let taskApplicationUserDefaultsOverride {
             return taskApplicationUserDefaultsOverride.value
@@ -111,7 +115,7 @@ public enum ClaudeOAuthKeychainPromptPreference {
             return taskImplicitApplicationUserDefaultsOverride.value
         }
         #endif
-        return ClaudeOAuthApplicationDefaults.resolve(domain: self.applicationDefaultsDomain)
+        return fallback()
     }
 
     static func resolveApplicationDefaultsDomain(
@@ -181,6 +185,10 @@ public enum ClaudeOAuthKeychainPromptPreference {
 
     public static var currentTaskOverrideForTesting: ClaudeOAuthKeychainPromptMode? {
         self.taskOverride
+    }
+
+    static var applicationUserDefaultsOverrideForTesting: UserDefaults? {
+        self.taskApplicationUserDefaultsOverride?.value ?? self.taskImplicitApplicationUserDefaultsOverride?.value
     }
 
     static func withApplicationUserDefaultsOverrideForTesting<T>(

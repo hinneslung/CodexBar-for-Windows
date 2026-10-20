@@ -2,7 +2,7 @@ import CodexBarCore
 import Foundation
 
 /// How much account identity a dashboard snapshot exposes. Dashboard commands
-/// default to `.full`; `.redacted` remains available as an explicit privacy mode.
+/// retain ordinary snapshot defaults; live account expansion defaults to `.none`.
 enum DashboardIdentityMode: String, Equatable, Sendable {
     case none
     case redacted
@@ -25,16 +25,19 @@ struct DashboardSnapshotPayload: Encodable {
 struct DashboardHostPayload: Encodable {
     let codexBarVersion: String?
     let refreshIntervalSeconds: Int
+    let usageBarsShowUsed: Bool
 
     private enum CodingKeys: String, CodingKey {
         case codexBarVersion
         case refreshIntervalSeconds
+        case usageBarsShowUsed
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(self.codexBarVersion, forKey: .codexBarVersion)
         try container.encode(self.refreshIntervalSeconds, forKey: .refreshIntervalSeconds)
+        try container.encode(self.usageBarsShowUsed, forKey: .usageBarsShowUsed)
     }
 }
 
@@ -51,7 +54,7 @@ struct DashboardProviderPayload: Encodable {
     let display: DashboardDisplayPayload
     let error: ProviderErrorPayload?
     let updatedAt: Date?
-    /// Per-account entries from a local multi-account source (today: claude-swap).
+    /// Saved managed Codex and Claude-swap entries; additional live accounts are opt-in.
     /// Additive schema-v1 data; absent for providers without such a source.
     let accounts: [DashboardAccountPayload]?
     /// Row-local failure of the multi-account source; the ambient provider row stays intact.
@@ -258,13 +261,32 @@ struct DashboardCostPayload: Encodable {
     let todayUSD: Double?
     let last30DaysUSD: Double?
 
+    let todayIncompleteRequestCount: Int?
+    let last30DaysIncompleteRequestCount: Int?
+
+    init(
+        todayUSD: Double?,
+        last30DaysUSD: Double?,
+        todayIncompleteRequestCount: Int? = nil,
+        last30DaysIncompleteRequestCount: Int? = nil)
+    {
+        self.todayUSD = todayUSD
+        self.last30DaysUSD = last30DaysUSD
+        self.todayIncompleteRequestCount = todayIncompleteRequestCount.flatMap { $0 > 0 ? $0 : nil }
+        self.last30DaysIncompleteRequestCount = last30DaysIncompleteRequestCount.flatMap { $0 > 0 ? $0 : nil }
+    }
+
     private enum CodingKeys: String, CodingKey {
+        case todayIncompleteRequestCount
+        case last30DaysIncompleteRequestCount
         case todayUSD
         case last30DaysUSD
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(self.todayIncompleteRequestCount, forKey: .todayIncompleteRequestCount)
+        try container.encodeIfPresent(self.last30DaysIncompleteRequestCount, forKey: .last30DaysIncompleteRequestCount)
         try container.encode(self.todayUSD, forKey: .todayUSD)
         try container.encode(self.last30DaysUSD, forKey: .last30DaysUSD)
     }

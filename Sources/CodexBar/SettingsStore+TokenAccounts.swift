@@ -23,12 +23,22 @@ extension SettingsStore {
     /// stay passive until the user explicitly selects one again.
     func effectiveSelectedTokenAccount(for provider: UsageProvider) -> ProviderTokenAccount? {
         let support = TokenAccountSupportCatalog.support(for: provider)
+        if support?.passiveSourceModes.contains(self.providerConfig(for: provider)?.source ?? .auto) == true {
+            return nil
+        }
         if support?.selectedAccountRequiresManualCookieSource == true,
            (self.providerConfig(for: provider)?.cookieSource ?? .auto) == .auto
         {
             return nil
         }
         return self.selectedTokenAccount(for: provider)
+    }
+
+    func modelRateLimitScope(for provider: UsageProvider) -> ProviderModelRateLimitScope {
+        if let account = self.effectiveSelectedTokenAccount(for: provider) {
+            return .tokenAccount(account.id)
+        }
+        return .provider
     }
 
     func setActiveTokenAccountIndex(_ index: Int, for provider: UsageProvider) {
@@ -57,20 +67,13 @@ extension SettingsStore {
         externalIdentifier: String? = nil,
         usageScope: String? = nil,
         organizationID: String? = nil,
-        workspaceID: String? = nil)
+        workspaceID: String? = nil,
+        claudeConfigDirectory: String? = nil)
     {
         guard TokenAccountSupportCatalog.support(for: provider) != nil else { return }
         let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedToken.isEmpty else { return }
         let trimmedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedIdentifier = externalIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalisedIdentifier = (trimmedIdentifier?.isEmpty ?? true) ? nil : trimmedIdentifier
-        let trimmedUsageScope = usageScope?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalisedUsageScope = (trimmedUsageScope?.isEmpty ?? true) ? nil : trimmedUsageScope
-        let trimmedOrganizationID = organizationID?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalisedOrganizationID = (trimmedOrganizationID?.isEmpty ?? true) ? nil : trimmedOrganizationID
-        let trimmedWorkspaceID = workspaceID?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalisedWorkspaceID = (trimmedWorkspaceID?.isEmpty ?? true) ? nil : trimmedWorkspaceID
         let existing = self.tokenAccountsData(for: provider)
         let accounts = existing?.accounts ?? []
         let fallbackLabel = trimmedLabel.isEmpty ? "Account \(accounts.count + 1)" : trimmedLabel
@@ -80,10 +83,11 @@ extension SettingsStore {
             token: trimmedToken,
             addedAt: Date().timeIntervalSince1970,
             lastUsed: nil,
-            externalIdentifier: normalisedIdentifier,
-            usageScope: normalisedUsageScope,
-            organizationID: normalisedOrganizationID,
-            workspaceID: normalisedWorkspaceID)
+            externalIdentifier: Self.normalizedConfigField(externalIdentifier),
+            usageScope: Self.normalizedConfigField(usageScope),
+            organizationID: Self.normalizedConfigField(organizationID),
+            workspaceID: Self.normalizedConfigField(workspaceID),
+            claudeConfigDirectory: Self.normalizedConfigField(claudeConfigDirectory))
         let updated = ProviderTokenAccountData(
             version: existing?.version ?? 1,
             accounts: accounts + [account],
@@ -111,7 +115,9 @@ extension SettingsStore {
         externalIdentifier: String?? = nil,
         usageScope: String?? = nil,
         organizationID: String?? = nil,
-        workspaceID: String?? = nil)
+        workspaceID: String?? = nil,
+        claudeConfigDirectory: String?? = nil,
+        seatCreditEntitlement: String?? = nil)
     {
         guard let data = self.tokenAccountsData(for: provider), !data.accounts.isEmpty else { return }
         guard let index = data.accounts.firstIndex(where: { $0.id == accountID }) else { return }
@@ -123,44 +129,22 @@ extension SettingsStore {
         }
 
         let existing = data.accounts[index]
-        let resolvedIdentifier: String?
-        if let externalIdentifier {
-            let trimmed = externalIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines)
-            resolvedIdentifier = (trimmed?.isEmpty ?? true) ? nil : trimmed
-        } else {
-            resolvedIdentifier = existing.externalIdentifier
-        }
-        let resolvedUsageScope: String?
-        if let usageScope {
-            let trimmed = usageScope?.trimmingCharacters(in: .whitespacesAndNewlines)
-            resolvedUsageScope = (trimmed?.isEmpty ?? true) ? nil : trimmed
-        } else {
-            resolvedUsageScope = existing.usageScope
-        }
-        let resolvedOrganizationID: String?
-        if let organizationID {
-            let trimmed = organizationID?.trimmingCharacters(in: .whitespacesAndNewlines)
-            resolvedOrganizationID = (trimmed?.isEmpty ?? true) ? nil : trimmed
-        } else {
-            resolvedOrganizationID = existing.organizationID
-        }
-        let resolvedWorkspaceID: String?
-        if let workspaceID {
-            let trimmed = workspaceID?.trimmingCharacters(in: .whitespacesAndNewlines)
-            resolvedWorkspaceID = (trimmed?.isEmpty ?? true) ? nil : trimmed
-        } else {
-            resolvedWorkspaceID = existing.workspaceID
-        }
+        let updatesEffectiveAccount = self.effectiveSelectedTokenAccount(for: provider)?.id == accountID
         let updatedAccount = ProviderTokenAccount(
             id: existing.id,
             label: (trimmedLabel?.isEmpty == false) ? trimmedLabel! : existing.label,
             token: trimmedToken ?? existing.token,
             addedAt: existing.addedAt,
             lastUsed: existing.lastUsed,
-            externalIdentifier: resolvedIdentifier,
-            usageScope: resolvedUsageScope,
-            organizationID: resolvedOrganizationID,
-            workspaceID: resolvedWorkspaceID)
+            externalIdentifier: externalIdentifier.map(Self.normalizedConfigField) ?? existing.externalIdentifier,
+            usageScope: usageScope.map(Self.normalizedConfigField) ?? existing.usageScope,
+            organizationID: organizationID.map(Self.normalizedConfigField) ?? existing.organizationID,
+            workspaceID: workspaceID.map(Self.normalizedConfigField) ?? existing.workspaceID,
+            claudeConfigDirectory: claudeConfigDirectory.map(Self.normalizedConfigField)
+                ?? existing.claudeConfigDirectory,
+            seatCreditEntitlement: seatCreditEntitlement.map(Self.normalizedConfigField)
+                ?? existing.seatCreditEntitlement,
+            modelRateLimits: existing.modelRateLimits)
 
         var accounts = data.accounts
         accounts[index] = updatedAccount
@@ -174,13 +158,31 @@ extension SettingsStore {
                 entry.apiKey = nil
             }
         }
-        self.applyTokenAccountCookieSourceIfNeeded(provider: provider)
+        // Editing a dormant saved account must not switch the provider away from its live source.
+        if updatesEffectiveAccount {
+            self.applyTokenAccountCookieSourceIfNeeded(provider: provider)
+        }
         CodexBarLog.logger(LogCategories.tokenAccounts).info(
             "Token account updated",
             metadata: [
                 "provider": provider.rawValue,
                 "count": "\(updated.accounts.count)",
             ])
+    }
+
+    func moveTokenAccount(provider: UsageProvider, accountID: UUID, to destination: Int) {
+        guard let data = self.tokenAccountsData(for: provider),
+              data.accounts.indices.contains(destination),
+              let source = data.accounts.firstIndex(where: { $0.id == accountID }),
+              source != destination else { return }
+        let activeID = data.accounts[data.clampedActiveIndex()].id
+        var accounts = data.accounts
+        accounts.insert(accounts.remove(at: source), at: destination)
+        guard let activeIndex = accounts.firstIndex(where: { $0.id == activeID }) else { return }
+        self.updateProviderConfig(provider: provider) { entry in
+            entry.tokenAccounts = ProviderTokenAccountData(
+                version: data.version, accounts: accounts, activeIndex: activeIndex)
+        }
     }
 
     func removeTokenAccount(provider: UsageProvider, accountID: UUID) {
@@ -221,37 +223,19 @@ extension SettingsStore {
             ])
     }
 
-    func ensureTokenAccountsLoaded() {
-        if self.tokenAccountsLoaded {
-            return
-        }
-        self.tokenAccountsLoaded = true
-    }
-
     func reloadTokenAccounts() {
-        let log = CodexBarLog.logger(LogCategories.tokenAccounts)
-        let accounts: [UsageProvider: ProviderTokenAccountData]
-        do {
-            guard let loaded = try self.configStore.load() else { return }
-            accounts = Dictionary(uniqueKeysWithValues: loaded.providers.compactMap { entry in
-                guard let provider = entry.id.firstPartyProvider,
-                      let data = entry.tokenAccounts
-                else { return nil }
-                return (provider, data)
-            })
-        } catch {
-            log.error("Failed to reload token accounts: \(error)")
-            return
-        }
-        self.tokenAccountsLoaded = true
-        self.updateProviderTokenAccounts(accounts)
+        self.reloadConfig(reason: "token-accounts", origin: .localFile)
     }
 
     func openTokenAccountsFile() {
         do {
-            let data = try self.configStore.encodedData(for: self.config)
-            self.configFileWatcher?.noteAppWrite(data: data)
-            try self.configStore.saveEncodedData(data)
+            if !self.configNeedsReload {
+                try Self.writeConfig(
+                    self.config,
+                    to: self.configStore,
+                    watcher: self.configFileWatcher,
+                    permit: self.configPersistenceCoordinator.makeWritePermit())
+            }
         } catch {
             CodexBarLog.logger(LogCategories.tokenAccounts).error("Failed to persist config: \(error)")
             return
@@ -313,20 +297,20 @@ extension SettingsStore {
         _ shared: AntigravityOAuthCredentials,
         _ removed: AntigravityOAuthCredentials) -> Bool
     {
-        if let sharedRefreshToken = self.normalizedAntigravityCredentialToken(shared.refreshToken),
-           let removedRefreshToken = self.normalizedAntigravityCredentialToken(removed.refreshToken)
+        if let sharedRefreshToken = self.normalizedConfigField(shared.refreshToken),
+           let removedRefreshToken = self.normalizedConfigField(removed.refreshToken)
         {
             return sharedRefreshToken == removedRefreshToken
         }
-        if let sharedAccessToken = self.normalizedAntigravityCredentialToken(shared.accessToken),
-           let removedAccessToken = self.normalizedAntigravityCredentialToken(removed.accessToken)
+        if let sharedAccessToken = self.normalizedConfigField(shared.accessToken),
+           let removedAccessToken = self.normalizedConfigField(removed.accessToken)
         {
             return sharedAccessToken == removedAccessToken
         }
-        guard self.normalizedAntigravityCredentialToken(shared.refreshToken) == nil,
-              self.normalizedAntigravityCredentialToken(removed.refreshToken) == nil,
-              self.normalizedAntigravityCredentialToken(shared.accessToken) == nil,
-              self.normalizedAntigravityCredentialToken(removed.accessToken) == nil
+        guard self.normalizedConfigField(shared.refreshToken) == nil,
+              self.normalizedConfigField(removed.refreshToken) == nil,
+              self.normalizedConfigField(shared.accessToken) == nil,
+              self.normalizedConfigField(removed.accessToken) == nil
         else {
             return false
         }
@@ -343,13 +327,13 @@ extension SettingsStore {
         {
             return lhsEmail == rhsEmail
         }
-        if let lhsRefreshToken = self.normalizedAntigravityCredentialToken(lhs.refreshToken),
-           let rhsRefreshToken = self.normalizedAntigravityCredentialToken(rhs.refreshToken)
+        if let lhsRefreshToken = self.normalizedConfigField(lhs.refreshToken),
+           let rhsRefreshToken = self.normalizedConfigField(rhs.refreshToken)
         {
             return lhsRefreshToken == rhsRefreshToken
         }
-        if let lhsAccessToken = self.normalizedAntigravityCredentialToken(lhs.accessToken),
-           let rhsAccessToken = self.normalizedAntigravityCredentialToken(rhs.accessToken)
+        if let lhsAccessToken = self.normalizedConfigField(lhs.accessToken),
+           let rhsAccessToken = self.normalizedConfigField(rhs.accessToken)
         {
             return lhsAccessToken == rhsAccessToken
         }
@@ -357,20 +341,6 @@ extension SettingsStore {
     }
 
     private nonisolated static func normalizedAntigravityAccountEmail(_ email: String?) -> String? {
-        guard let value = email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-              !value.isEmpty
-        else {
-            return nil
-        }
-        return value
-    }
-
-    private nonisolated static func normalizedAntigravityCredentialToken(_ token: String?) -> String? {
-        guard let value = token?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !value.isEmpty
-        else {
-            return nil
-        }
-        return value
+        self.normalizedConfigField(email)?.lowercased()
     }
 }

@@ -7,8 +7,27 @@ import Musl
 #endif
 import Foundation
 
+final class CLIStderrBuffer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var text = ""
+
+    var contents: String {
+        self.lock.withLock { self.text }
+    }
+
+    func append(_ string: String) {
+        self.lock.withLock { self.text += string }
+    }
+}
+
 extension CodexBarCLI {
+    @TaskLocal static var stderrBuffer: CLIStderrBuffer?
+
     static func writeStderr(_ string: String) {
+        if let buffer = stderrBuffer {
+            buffer.append(string)
+            return
+        }
         guard let data = string.data(using: .utf8) else { return }
         FileHandle.standardError.write(data)
     }
@@ -29,6 +48,8 @@ extension CodexBarCLI {
             print(Self.cardsHelp(version: version))
         case "usage":
             print(Self.usageHelp(version: version))
+        case "codex-accounts":
+            print(Self.codexAccountsHelp(version: version))
         case "cost":
             print(Self.costHelp(version: version))
         case "sessions", "focus":
@@ -82,7 +103,8 @@ extension CodexBarCLI {
         guard _NSGetExecutablePath(nil, &size) != 0 else { return nil }
         var buffer = [Int8](repeating: 0, count: Int(size))
         guard _NSGetExecutablePath(&buffer, &size) == 0 else { return nil }
-        return String(cString: buffer)
+        let bytes = buffer.map { UInt8(bitPattern: $0) }
+        return String(decodingCString: bytes, as: UTF8.self)
         #elseif os(Linux)
         let path = "/proc/self/exe"
         guard FileManager.default.fileExists(atPath: path) else { return nil }

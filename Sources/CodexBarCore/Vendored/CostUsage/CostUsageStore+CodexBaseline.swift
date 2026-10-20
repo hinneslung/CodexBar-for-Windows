@@ -25,7 +25,8 @@ extension CostUsageStore {
 
         init(
             snapshot: CostUsageStoreSnapshot,
-            snapshotCounts: [String: Int]? = nil)
+            snapshotCounts: [String: Int]? = nil,
+            rowCounts: [String: Int]? = nil)
         {
             self.metadata = snapshot.metadata
             self.files = snapshot.files.map { file in
@@ -38,7 +39,7 @@ extension CostUsageStore {
             }
             self.snapshotCounts = snapshotCounts
                 ?? snapshot.tokenSnapshots.reduce(into: [:]) { $0[$1.path, default: 0] += 1 }
-            self.rowCounts = snapshot.usageRows.reduce(into: [:]) { $0[$1.path, default: 0] += 1 }
+            self.rowCounts = rowCounts ?? snapshot.usageRows.reduce(into: [:]) { $0[$1.path, default: 0] += 1 }
         }
     }
 
@@ -48,6 +49,7 @@ extension CostUsageStore {
         var stamp: DatabaseStamp
         var unloadedTokenSnapshotPaths: Set<String>
         var tokenSnapshotsLoaded: Bool
+        var hydratedTokenSnapshots: [String: [CostUsageCodexTokenSnapshot]] = [:]
     }
 
     struct RetainedCodexBaseline {
@@ -55,14 +57,25 @@ extension CostUsageStore {
         var baseline: CodexDecodedBaseline
     }
 
+    struct RetainedCodexRead {
+        var decoded: CostUsageCache
+        var persistence: CodexPersistenceState
+        var stamp: DatabaseStamp
+        var purpose: CostUsageStoreReadPurpose
+    }
+
     func loadCodexScan(calendar: Calendar) -> CostUsageStoreLoad {
         self.retainedCodexBaseline = nil
         _ = self.removeLegacyCodexArtifactIfPresent()
         let receipt = CodexBaselineReceipt(store: self)
-        guard let baseline = self.readCodexBaseline() else {
+        if self.retainedCodexScan?.stamp != self.currentDatabaseStamp() {
+            self.retainedCodexScan = nil
+        }
+        guard let baseline = self.retainedCodexScan ?? self.readCodexBaseline() else {
             // Keep a receipt even on failure so save cannot fall back to accepting unbased content.
             return CostUsageStoreLoad(store: self, cache: CostUsageCache(), receipt: receipt)
         }
+        self.retainedCodexScan = baseline
         self.retainedCodexBaseline = RetainedCodexBaseline(id: receipt.id, baseline: baseline)
         let compatible = baseline.decoded.timeZoneIdentifier == nil
             || baseline.decoded.timeZoneIdentifier == calendar.timeZone.identifier
@@ -107,26 +120,23 @@ extension CostUsageStore {
 
     func readCodexBaseline(loadTokenSnapshots: Bool = false) -> CodexDecodedBaseline? {
         let baseline: CodexDecodedBaseline? = self.withDatabase(default: nil) { database in
-            guard let before = try? self.databaseStamp(database) else { return nil }
-            let snapshot = try? Self.inReadTransaction(database) {
-                let snapshot = try Self.readSnapshot(
-                    database,
-                    loadTokenSnapshots: loadTokenSnapshots,
-                    recorder: self.scopedReadWorkRecorderForTesting)
+            guard let before = try? self.databaseStamp(database) else {
+                self.requiresReadReopen = true
+                return nil
+            }
+            let read = try? Self.inReadTransaction(database) {
+                let read = try self.readDecodedCodexSnapshot(database, loadTokenSnapshots: loadTokenSnapshots)
                 #if DEBUG
-                if let checkpoint = Self.codexBaselineReadCheckpointForTesting,
-                   checkpoint.databaseURL == self.databaseURL
-                {
-                    try checkpoint.checkpoint()
-                }
+                try self.runCodexReadCheckpointForTesting()
                 #endif
-                return snapshot
+                return read
             }
             // data_version inside the read transaction can still describe its pinned snapshot.
             // Compare after COMMIT; never attach a newer version to the old decoded rows.
-            guard let snapshot, let after = try? self.databaseStamp(database), before == after else { return nil }
+            guard let read, let after = try? self.databaseStamp(database), before == after else { return nil }
             return self.makeCodexBaseline(
-                snapshot: snapshot,
+                snapshot: read.snapshot,
+                usageRows: read.rows,
                 stamp: after,
                 tokenSnapshotsLoaded: loadTokenSnapshots)
         }
@@ -138,8 +148,23 @@ extension CostUsageStore {
         return baseline
     }
 
+    func readDecodedCodexSnapshot(
+        _ database: OpaquePointer,
+        loadTokenSnapshots: Bool) throws -> (snapshot: CostUsageStoreSnapshot, rows: DecodedCodexUsageRows)
+    {
+        let recorder = self.scopedReadWorkRecorderForTesting
+        let snapshot = try Self.readSnapshot(
+            database,
+            loadTokenSnapshots: loadTokenSnapshots,
+            loadUsageRows: false,
+            recorder: recorder)
+        let rows = try Self.readDecodedCodexUsageRows(database, files: snapshot.files, recorder: recorder)
+        return (snapshot, rows)
+    }
+
     private func makeCodexBaseline(
         snapshot: CostUsageStoreSnapshot,
+        usageRows: DecodedCodexUsageRows,
         stamp: DatabaseStamp,
         tokenSnapshotsLoaded: Bool) -> CodexDecodedBaseline
     {
@@ -149,13 +174,15 @@ extension CostUsageStore {
                 from: snapshot,
                 recorder: self.scopedReadWorkRecorderForTesting,
                 tokenSnapshotsLoaded: tokenSnapshotsLoaded,
-                unloadedTokenSnapshotPathRecorder: { unloadedTokenSnapshotPaths.insert($0) }),
+                unloadedTokenSnapshotPathRecorder: { unloadedTokenSnapshotPaths.insert($0) },
+                decodedUsageRows: usageRows.rowsByPath),
             persistence: CodexPersistenceState(
                 snapshot: snapshot,
                 snapshotCounts: tokenSnapshotsLoaded ? nil :
                     Dictionary(uniqueKeysWithValues: snapshot.accumulators.map {
                         ($0.path, $0.eventCount)
-                    })),
+                    }),
+                rowCounts: usageRows.rowCounts),
             stamp: stamp,
             unloadedTokenSnapshotPaths: unloadedTokenSnapshotPaths,
             tokenSnapshotsLoaded: tokenSnapshotsLoaded)
@@ -176,25 +203,25 @@ extension CostUsageStore {
             var original = baseline.stamp
             original.totalChanges = current.totalChanges
             guard original == current else { return nil }
-            let snapshot = try Self.readSnapshot(
+            let read = try self.readDecodedCodexSnapshot(
                 database,
-                loadTokenSnapshots: baseline.tokenSnapshotsLoaded,
-                recorder: self.scopedReadWorkRecorderForTesting)
+                loadTokenSnapshots: baseline.tokenSnapshotsLoaded)
             return self.makeCodexBaseline(
-                snapshot: snapshot,
+                snapshot: read.snapshot,
+                usageRows: read.rows,
                 stamp: current,
                 tokenSnapshotsLoaded: baseline.tokenSnapshotsLoaded)
         }
     }
 
     #if DEBUG
-    nonisolated(unsafe) static var codexBaselineReadCheckpointForTesting: (
-        databaseURL: URL,
-        checkpoint: () throws -> Void)?
-
-    nonisolated(unsafe) static var codexTokenHydrationCheckpointForTesting: (
-        databaseURL: URL,
-        checkpoint: () throws -> Void)?
+    func runCodexReadCheckpointForTesting() throws {
+        if let checkpoint = CostUsageStoreTestHooks.current.codexBaselineReadCheckpoint,
+           checkpoint.databaseURL == self.databaseURL
+        {
+            try checkpoint.checkpoint()
+        }
+    }
 
     var retainedCodexBaselineCountForTesting: Int {
         self.retainedCodexBaseline == nil ? 0 : 1

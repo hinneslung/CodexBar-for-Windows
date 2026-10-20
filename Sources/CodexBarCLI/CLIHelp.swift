@@ -2,6 +2,22 @@ import CodexBarCore
 import Foundation
 
 extension CodexBarCLI {
+    static func codexAccountsHelp(version: String) -> String {
+        """
+        CodexBar \(version)
+
+        Usage:
+          codexbar codex-accounts list [--json] [--pretty]
+          codexbar codex-accounts promote <exact-uuid-or-email> [--json] [--pretty]
+
+        Description:
+          macOS only. List CodexBar managed accounts without credential contents.
+          Promote explicitly replaces system Codex authentication after preserving its account.
+          Ambiguous emails require an exact UUID. Concurrent account changes fail without overwriting.
+          Existing Codex processes may retain their current account; restart them to use the promoted account.
+        """
+    }
+
     static func pluginsHelp(version: String) -> String {
         """
         CodexBar \(version)
@@ -80,7 +96,6 @@ extension CodexBarCLI {
           - Codex: OpenAI web dashboard (usage limits, credits remaining, code review remaining, usage breakdown).
             Auto falls back to Codex CLI only when cookies are missing.
           - Claude: claude.ai API.
-            Auto falls back to Claude CLI only when cookies are missing.
           - Kilo: app.kilo.ai API.
             Auto falls back to Kilo CLI when API credentials are missing or unauthorized.
           Token accounts are loaded from the resolved CodexBar config file.
@@ -118,15 +133,26 @@ extension CodexBarCLI {
                        [--json-only]
                        [--json-output] [--log-level <trace|verbose|debug|info|warning|error|critical>] [-v|--verbose]
                        [--provider \(ProviderHelp.list)]
-                       [--no-color] [--pretty] [--refresh] [--provider-native-only]
-                       [--days <days>] [--group-by project|session]
+                       [--no-color] [--pretty] [--refresh] [--breakdown] [--provider-native-only]
+                       [--period month-to-date|all] [--days <days>] [--group-by project|session]
+                       [--remote <ssh-host> | --summary-only]
+                       [--identified-only [--identified-end <unix-ms>]]
 
         Description:
           Print local token cost usage from Claude/Codex native logs plus supported pi and OMP sessions.
-          Antigravity token history is also read locally, with dollar costs left unknown.
+          Antigravity token history is read locally, with API-price estimates for known models; Muse Code remains
+          token-only.
           Local readers need no web or provider CLI access; Cursor uses its authenticated dashboard API.
           Use --refresh to bypass cached scan results.
+          Use --breakdown with Claude text output to show daily and model details.
           Experimental: use --provider-native-only to exclude pi and OMP session mirrors.
+          Use --provider codex --remote <host> for separate local and SSH-host summaries.
+          --summary-only emits versioned Codex JSON totals without account or session details.
+          --identified-only requires --provider codex and JSON. It exports strong native request identities
+          over one UTC window (30 days by default); legacy and unidentified usage are excluded. Prices are unavailable.
+          Add --remote to deduplicate that export with one SSH host using the same millisecond window.
+          Both hosts need a CLI supporting --identified-only. Failures retain an explicitly partial local subtotal.
+          These modes accept --days 1...365, not --period, --summary-only, grouping or breakdown.
 
         Examples:
           codexbar cost
@@ -134,6 +160,9 @@ extension CodexBarCLI {
           codexbar cost --provider codex --group-by session
           codexbar cost --provider claude --format json --pretty
           codexbar cost --provider antigravity --format json
+          codexbar cost --provider muse --format json
+          codexbar cost --provider codex --remote build-host --format json
+          codexbar cost --provider codex --identified-only --format json --remote build-host
         """
     }
 
@@ -204,7 +233,7 @@ extension CodexBarCLI {
           codexbar serve [--host <host>] [--port <port>] [--refresh-interval <seconds>]
                          [--request-timeout <seconds>]
                          [--dashboard-token <token>] [--allow-plain-http]
-                         [--identity <redacted|full>]
+                         [--identity <redacted|full>] [--all-accounts]
                          [--json-output] [--log-level <trace|verbose|debug|info|warning|error|critical>]
                          [-v|--verbose]
 
@@ -219,15 +248,25 @@ extension CodexBarCLI {
           Transport is plain HTTP: the token crosses the network in cleartext on every
           request. A non-loopback --host therefore requires both a dashboard token and
           --allow-plain-http, which records that you accept that trade-off. On a
-          non-loopback host the token also gates /usage and /cost (account data);
+          non-loopback host the token also gates /accounts, /usage, and /cost (account data);
           / and /health are always open. Use a TLS-terminating reverse proxy for anything
           beyond a trusted network segment.
-          Snapshot identity defaults to full account emails. --identity redacted hides
-          email local parts and is recommended whenever responses cross a network.
+          Ordinary snapshots and /accounts discovery follow the app's Hide personal information
+          setting unless --identity is set. Redacted discovery hides arbitrary labels and email local parts.
+          --all-accounts includes visible Codex profiles and configured token accounts
+          in dashboard snapshots only, with neutral labels and no identity by default.
+          --identity full explicitly includes account identities, labels and error details;
+          --identity redacted keeps email domains but hides labels and error details.
+          /usage keeps its existing Codex enumeration.
+
+          Account IDs are stable opaque identifiers; clients must not parse their internal format.
+          Account discovery reads metadata only and never returns credentials or refreshes usage.
 
         Endpoints:
           GET /                    Built-in web dashboard
           GET /health
+          GET /accounts             Discover CodexBar-managed accounts
+          GET /accounts/<id>        Fetch one account by opaque ID
           GET /usage
           GET /usage?provider=claude
           GET /usage?provider=all
@@ -241,6 +280,7 @@ extension CodexBarCLI {
           CODEXBAR_DASHBOARD_TOKEN=YOUR_TOKEN codexbar serve
           CODEXBAR_DASHBOARD_TOKEN=... codexbar serve --host 0.0.0.0 --allow-plain-http
           curl http://127.0.0.1:8080/usage?provider=all
+          curl http://127.0.0.1:8080/accounts
           curl -H "Authorization: Bearer $CODEXBAR_DASHBOARD_TOKEN" \\
             http://127.0.0.1:8080/dashboard/v1/snapshot
         """
@@ -263,9 +303,13 @@ extension CodexBarCLI {
                              [--json-output] [--log-level <trace|verbose|debug|info|warning|error|critical>]
                              [-v|--verbose]
                              [--pretty]
+          codexbar config preferences export [--file <preferences.json>]
+          codexbar config preferences import --file <preferences.json> [--json]
           codexbar config providers [--format text|json] [--json] [--json-only] [--pretty]
           codexbar config enable --provider <name> [--format text|json] [--json] [--json-only] [--pretty]
           codexbar config disable --provider <name> [--format text|json] [--json] [--json-only] [--pretty]
+          codexbar config set-source --provider <name> --source auto|web|cli|oauth|api
+                                   [--format text|json] [--json] [--json-only] [--pretty]
           codexbar config set-api-key --provider <name> (--api-key <key>|--stdin)
                                     [--label <label>] [--usage-scope team]
                                     [--organization-id <org>] [--workspace-id <project>]
@@ -276,8 +320,11 @@ extension CodexBarCLI {
           Validate or print the CodexBar config file (default: validate).
           dump prints normalized config JSON with stored credentials redacted by default
           (use --show-secrets to reveal raw values).
+          preferences transfers allowlisted UI settings on macOS; import applies in the running app or next launch.
+          Export writes JSON to stdout unless --file is supplied. --defaults-domain selects an alternate app domain.
           providers lists persistent provider enablement.
           enable/disable updates the same provider toggle used by Settings.
+          set-source stores a supported data source without changing provider enablement; auto clears the override.
           set-api-key stores a provider API key in the resolved config file and enables that provider by default.
           For z.ai team usage, add --usage-scope team with BigModel organization and project IDs; this stores
           the key as a token account instead of a provider-level personal key.
@@ -288,6 +335,7 @@ extension CodexBarCLI {
           codexbar config providers
           codexbar config enable --provider grok
           codexbar config disable --provider cursor
+          codexbar config set-source --provider claude --source cli
           printf '%s' "$ELEVENLABS_API_KEY" | codexbar config set-api-key --provider elevenlabs --stdin
           printf '%s' "$Z_AI_API_KEY" | codexbar config set-api-key --provider zai --stdin \\
             --label Team --usage-scope team --organization-id org_... --workspace-id proj_...
@@ -336,16 +384,16 @@ extension CodexBarCLI {
         Description:
           Run external commands when quota/provider events occur. Rules are stored in the
           shared config file and are disabled by default. Events:
-          quota_low, quota_reached, quota_reset, provider_unavailable, provider_recovered,
-          refresh_failed.
+          quota_low, quota_reached, quota_reset, usage_updated, provider_unavailable,
+          provider_recovered, refresh_failed.
 
           Commands run directly (no shell), receive event metadata via CODEXBAR_* environment
           variables and a JSON payload on stdin, and are timed out. Only configure commands you trust.
 
           `watch` polls the selected providers and fires rules on real transitions, so hooks
           work without the macOS app. Events are edge-triggered against the previous poll, so a
-          persisting condition does not re-fire. Baselines are in-memory: the first poll of a
-          lane establishes state without firing. Keep one continuous process running so transition
+          persisting condition does not re-fire. The first successful poll can emit usage_updated;
+          quota-transition baselines are established without firing. Keep one continuous process so transition
           baselines and event rate limits survive between polls. Default interval 300s, minimum 60s.
 
         Examples:
@@ -413,7 +461,7 @@ extension CodexBarCLI {
         CodexBar \(version)
 
         Usage:
-          codexbar guard --provider \(ProviderHelp.list)
+          codexbar guard --provider \(ProviderHelp.concreteList)
                         [--min-remaining <percent>] [--window session|weekly]
                         [--timeout <seconds>] [--json] [--pretty] [--fail-open]
                         [--json-output] [--log-level <trace|verbose|debug|info|warning|error|critical>] [-v|--verbose]
@@ -463,11 +511,12 @@ extension CodexBarCLI {
                        [--json]
                        [--json-only]
                        [--json-output] [--log-level <trace|verbose|debug|info|warning|error|critical>] [-v|--verbose]
-                       [--provider \(ProviderHelp.list)] [--no-color] [--pretty] [--refresh]
+                       [--provider \(ProviderHelp.list)] [--no-color] [--pretty] [--refresh] [--breakdown]
                        [--provider-native-only]
-                       [--days <days>] [--group-by project|session]
+                       [--period month-to-date|all] [--days <days>] [--group-by project|session]
           codexbar sessions [--json|--json-v2] [--pretty]
           codexbar sessions focus <id>
+          codexbar codex-accounts <list|promote> [--json] [--pretty]
           codexbar dashboard [--pretty] [--timeout <seconds>] [--output <path>]
           codexbar serve [--host <host>] [--port <port>] [--refresh-interval <seconds>]
                        [--request-timeout <seconds>]
@@ -481,6 +530,7 @@ extension CodexBarCLI {
                                         [--pretty]
           codexbar config enable --provider <name>
           codexbar config disable --provider <name>
+          codexbar config set-source --provider <name> --source auto|web|cli|oauth|api
           codexbar config set-api-key --provider <name> (--api-key <key>|--stdin)
           codexbar config set-api-key --provider zai --stdin --usage-scope team
                                    --organization-id <org> --workspace-id <project>

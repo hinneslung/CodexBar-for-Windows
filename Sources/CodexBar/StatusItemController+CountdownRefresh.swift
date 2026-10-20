@@ -18,18 +18,12 @@ extension StatusItemController {
         var countdownResetDates: [Date] = []
         var absoluteResetDates: [Date] = []
         for provider in providers {
-            let resetDates = self.menuBarDisplayedResetDates(for: provider, now: now)
-            let resolution = self.settings.menuBarLayoutResolution(for: provider)
+            let resolution = self.renderedMenuBarLayoutResolution(for: provider)
             if !resolution.usesLegacyRendering,
                self.settings.menuBarIconStyle == .iconAndPercent
             {
-                let tokens = resolution.layout.flattenedTokens(conditionals: self.settings.menuBarLayoutConditionals)
-                if tokens.contains(.resetCountdown) {
-                    countdownResetDates.append(contentsOf: resetDates)
-                }
-                if tokens.contains(.resetAbsolute) {
-                    absoluteResetDates.append(contentsOf: resetDates)
-                }
+                countdownResetDates += self.menuBarLayoutResetDates(for: provider, now: now, absolute: false)
+                absoluteResetDates += self.menuBarLayoutResetDates(for: provider, now: now, absolute: true)
                 delays += self.menuBarConditionalResetDelays(
                     provider: provider,
                     resolution: resolution,
@@ -44,6 +38,7 @@ extension StatusItemController {
             guard self.settings.menuBarShowsBrandIconWithPercent,
                   displayMode == .resetTime || smartExhaustedActive
             else { continue }
+            let resetDates = self.menuBarDisplayedResetDates(for: provider, now: now)
             switch self.settings.resetTimeDisplayStyle {
             case .countdown:
                 countdownResetDates.append(contentsOf: resetDates)
@@ -53,8 +48,7 @@ extension StatusItemController {
         }
 
         if let delay = Self.menuBarCountdownRefreshDelay(resetDates: countdownResetDates, now: now) {
-            // Countdown text ticks every minute; refresh on each displayed-minute boundary (the last of
-            // which lands at the reset, flipping a smart-exhausted lane back to the percentage).
+            // Match the formatter's visible precision, then observe expiration for exhausted-lane transitions.
             delays.append(delay)
         }
         if let delay = Self.menuBarAbsoluteRefreshDelay(resetDates: absoluteResetDates, now: now) {
@@ -63,7 +57,7 @@ extension StatusItemController {
             // the reset itself, whichever comes first; the next icon update schedules any later boundary.
             delays.append(delay)
         }
-        delays += self.menuBarWeeklyPaceRefreshDelays(providers: providers, now: now)
+        delays += self.menuBarPaceRefreshDelays(providers: providers, now: now)
 
         if self.menuBarObservesCodexReset(providers: providers) {
             let projection = self.store.codexConsumerProjection(surface: .menuBar, now: now)
@@ -96,7 +90,10 @@ extension StatusItemController {
             let remaining = resetDate.timeIntervalSince(now)
             guard remaining > 0 else { return nil }
             let displayedMinutes = ceil(remaining / 60)
-            let nextBoundaryRemaining = max(0, displayedMinutes - 1) * 60
+            let displayedHours = floor(displayedMinutes / 60)
+            let nextMinutes = displayedMinutes >= 1440 && displayedHours.truncatingRemainder(dividingBy: 24) > 0
+                ? displayedHours * 60 - 1 : displayedMinutes - 1
+            let nextBoundaryRemaining = remaining >= 1 ? max(1, nextMinutes * 60) : 0
             return max(
                 self.menuBarCountdownRefreshEpsilon,
                 remaining - nextBoundaryRemaining + self.menuBarCountdownRefreshEpsilon)
@@ -123,7 +120,7 @@ extension StatusItemController {
     /// Wake at `resetsAt - threshold` for every placed reset-countdown predicate. Nothing else in the
     /// layout changes at that instant, so without this the branch would only flip on the next unrelated
     /// refresh. Run-out predicates are deliberately excluded: their estimate drifts with usage rather
-    /// than crossing a fixed instant, and `menuBarWeeklyPaceRefreshDelays` already covers that lane.
+    /// than crossing a fixed instant, and `menuBarPaceRefreshDelays` already covers that lane.
     private func menuBarConditionalResetDelays(
         provider: UsageProvider,
         resolution: MenuBarLayoutResolution,
@@ -136,7 +133,7 @@ extension StatusItemController {
         guard !predicates.isEmpty else { return [] }
 
         let snapshot = self.store.menuBarSnapshot(for: provider.instanceID)
-        let windows = self.menuBarLayoutWindows(provider: provider, snapshot: snapshot, now: now)
+        let windows = self.store.menuBarLayoutWindows(provider: provider, snapshot: snapshot, now: now)
         let scopedWeekly = MenuBarLayoutSemanticWindowResolver
             .scopedWeeklyNamedWindow(snapshot: snapshot)?.window
         return predicates.compactMap { predicate -> TimeInterval? in
@@ -145,6 +142,7 @@ extension StatusItemController {
             case .weeklyResetsIn: windows.weekly
             case .scopedWeeklyResetsIn: scopedWeekly
             case .automaticResetsIn: windows.automatic
+            case .spendResetsIn: windows.spend
             default: nil
             }
             guard let resetsAt = window?.resetsAt else { return nil }
@@ -156,8 +154,11 @@ extension StatusItemController {
     }
 
     private func menuBarRefreshProviders() -> [UsageProvider] {
+        if let stackedProviders = self.stackedMergeIconProvidersIfActive() {
+            return [stackedProviders.top, stackedProviders.bottom]
+        }
         if self.shouldMergeIcons {
-            return [self.primaryProviderForUnifiedIcon()]
+            return [self.primaryProviderForUnifiedIcon()].compactMap(\.firstPartyProvider)
         }
         return UsageProvider.allCases.filter(self.isVisible)
     }
@@ -166,12 +167,14 @@ extension StatusItemController {
         if providers.contains(.codex) {
             return true
         }
-        guard self.shouldMergeIcons, self.settings.menuBarShowsHighestUsage else {
+        guard self.stackedMergeIconProvidersIfActive() == nil,
+              self.shouldMergeIcons, self.settings.unifiedIconSource == .highestUsage
+        else {
             return false
         }
         let activeProviders = self.store.enabledFirstPartyProvidersForDisplay()
         return self.settings.resolvedMergedOverviewProviders(
-            activeProviders: activeProviders,
+            activeProviders: self.overviewProviderIDs(enabledProviders: activeProviders),
             maxVisibleProviders: SettingsStore.mergedOverviewProviderLimit).contains(.codex)
     }
 
@@ -186,39 +189,35 @@ extension StatusItemController {
             boundary.timeIntervalSince(now) + self.menuBarCountdownRefreshEpsilon)
     }
 
-    private func menuBarWeeklyPaceRefreshDelays(
+    private func menuBarPaceRefreshDelays(
         providers: [UsageProvider],
         now: Date)
         -> [TimeInterval]
     {
-        providers.compactMap { provider in
-            let resolution = self.settings.menuBarLayoutResolution(for: provider)
+        providers.flatMap { provider -> [TimeInterval] in
+            let resolution = self.renderedMenuBarLayoutResolution(for: provider)
             guard !resolution.usesLegacyRendering,
                   self.settings.menuBarIconStyle == .iconAndPercent
-            else { return nil }
-            let showsWeeklyPace = resolution.layout
-                .flattenedTokens(conditionals: self.settings.menuBarLayoutConditionals)
-                .contains(where: {
-                    if case .pace(window: .weekly) = $0 { return true }
-                    return false
-                })
-                // A predicate reads the same pace value with no token to detect, so it needs the same
-                // eligibility wake-up.
-                || self.referencedConditionalMetrics(resolution: resolution).contains(.weeklyPace)
-            guard showsWeeklyPace else { return nil }
+            else { return [] }
+            let tokens = resolution.layout.flattenedTokens(conditionals: self.settings.menuBarLayoutConditionals)
+            // A predicate reads the same pace value with no token to detect, so it needs the same
+            // eligibility wake-up.
+            let metrics = self.referencedConditionalMetrics(resolution: resolution)
+            let paced: [(PercentWindow, MenuBarConditionalMetric)] = [(.weekly, .weeklyPace), (.spend, .spendPace)]
+                .filter { tokens.contains(.pace(window: $0)) || metrics.contains($1) }
+            guard !paced.isEmpty else { return [] }
             let snapshot = self.store.menuBarSnapshot(for: provider.instanceID)
-            guard let window = self.menuBarLayoutWindows(
-                provider: provider,
-                snapshot: snapshot,
-                now: now).weekly
-            else { return nil }
-            let elapsedWindow = self.store.paceWindowForElapsedEligibility(provider: provider, window: window)
-            return Self.menuBarPaceRefreshDelay(window: elapsedWindow, now: now)
+            let windows = self.store.menuBarLayoutWindows(provider: provider, snapshot: snapshot, now: now)
+            return paced.compactMap { percentWindow, _ in
+                guard let window = percentWindow == .spend ? windows.spend : windows.weekly else { return nil }
+                let elapsedWindow = self.store.paceWindowForElapsedEligibility(provider: provider, window: window)
+                return Self.menuBarPaceRefreshDelay(window: elapsedWindow, now: now)
+            }
         }
     }
 
     /// A pace or run-out predicate compares a clock-derived value, so it needs a tick even when no token
-    /// does. `menuBarWeeklyPaceRefreshDelays` only wakes on the one-shot pace-eligibility boundary, so a
+    /// does. `menuBarPaceRefreshDelays` only wakes on the one-shot pace-eligibility boundary, so a
     /// predicate-only layout would otherwise keep the branch that was true when the value last moved.
     ///
     /// Both numbers are pre-rounded to the granularity the menu bar shows — whole percentage points and
@@ -231,7 +230,9 @@ extension StatusItemController {
         -> [TimeInterval]
     {
         let metrics = self.referencedConditionalMetrics(resolution: resolution)
-        guard metrics.contains(where: \.isClockDerivedRate) else { return [] }
+        let tokens = resolution.layout.flattenedTokens(conditionals: self.settings.menuBarLayoutConditionals)
+        guard metrics.contains(where: \.isClockDerivedRate)
+            || tokens.contains(.runsOut) || tokens.contains(.runsOutCompact) else { return [] }
         let secondsIntoMinute = now.timeIntervalSince1970.truncatingRemainder(dividingBy: 60)
         return [max(
             Self.menuBarCountdownRefreshEpsilon,

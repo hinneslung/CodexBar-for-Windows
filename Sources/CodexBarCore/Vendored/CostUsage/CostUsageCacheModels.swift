@@ -210,8 +210,60 @@ struct CostUsageCodexPreviousReport: Codable, Equatable {
         }
     }
 
+    struct HourlyEntry: Codable, Equatable {
+        var hourUnixMs: Int64
+        var totalTokens: Int?
+        var costUSD: Double?
+        var tokensAreComplete: Bool?
+        var costIsComplete: Bool?
+
+        init(_ entry: CostUsageHourlyEntry) {
+            self.hourUnixMs = Int64((entry.hour.timeIntervalSince1970 * 1000).rounded())
+            self.totalTokens = entry.totalTokens
+            self.costUSD = entry.costUSD
+            self.tokensAreComplete = entry.tokensAreComplete
+            self.costIsComplete = entry.costIsComplete
+        }
+
+        var hourlyValue: CostUsageHourlyEntry {
+            CostUsageHourlyEntry(
+                hour: Date(timeIntervalSince1970: Double(self.hourUnixMs) / 1000),
+                totalTokens: self.totalTokens,
+                costUSD: self.costUSD,
+                tokensAreComplete: self.tokensAreComplete ?? (self.totalTokens != nil),
+                costIsComplete: self.costIsComplete ?? (self.costUSD != nil))
+        }
+    }
+
+    struct QuotaSlice: Codable, Equatable {
+        var timestampUnixMs: Int64
+        var totalTokens: Int?
+        var costUSD: Double?
+        var tokensAreComplete: Bool?
+        var costIsComplete: Bool?
+
+        init(_ entry: CostUsageTimedEntry) {
+            self.timestampUnixMs = Int64((entry.timestamp.timeIntervalSince1970 * 1000).rounded())
+            self.totalTokens = entry.totalTokens
+            self.costUSD = entry.costUSD
+            self.tokensAreComplete = entry.tokensAreComplete
+            self.costIsComplete = entry.costIsComplete
+        }
+
+        var timedValue: CostUsageTimedEntry {
+            CostUsageTimedEntry(
+                timestamp: Date(timeIntervalSince1970: Double(self.timestampUnixMs) / 1000),
+                totalTokens: self.totalTokens,
+                costUSD: self.costUSD,
+                tokensAreComplete: self.tokensAreComplete ?? (self.totalTokens != nil),
+                costIsComplete: self.costIsComplete ?? (self.costUSD != nil))
+        }
+    }
+
     var data: [Entry]
     var summary: Summary?
+    var hourly: [HourlyEntry]?
+    var quotaSlices: [QuotaSlice]?
     var updatedAtUnixMs: Int64
     var scanSinceKey: String?
     var scanUntilKey: String?
@@ -227,6 +279,8 @@ struct CostUsageCodexPreviousReport: Codable, Equatable {
         guard !report.data.isEmpty else { return nil }
         self.data = report.data.map(Entry.init)
         self.summary = report.summary.map(Summary.init)
+        self.hourly = report.hourly.isEmpty ? nil : report.hourly.map(HourlyEntry.init)
+        self.quotaSlices = report.quotaSlices.isEmpty ? nil : report.quotaSlices.map(QuotaSlice.init)
         self.updatedAtUnixMs = cache.lastScanUnixMs
         self.scanSinceKey = reportSinceKey
         self.scanUntilKey = reportUntilKey
@@ -235,7 +289,11 @@ struct CostUsageCodexPreviousReport: Codable, Equatable {
     }
 
     var report: CostUsageDailyReport {
-        CostUsageDailyReport(data: self.data.map(\.dailyReportValue), summary: self.summary?.dailyReportValue)
+        CostUsageDailyReport(
+            data: self.data.map(\.dailyReportValue),
+            summary: self.summary?.dailyReportValue,
+            hourly: (self.hourly ?? []).map(\.hourlyValue),
+            quotaSlices: (self.quotaSlices ?? []).map(\.timedValue))
     }
 
     var updatedAt: Date? {
@@ -264,6 +322,9 @@ struct CostUsageCodexRetryBufferPresence: Codable, Equatable, Sendable {
 }
 
 struct CostUsageFileUsage: Codable, Equatable {
+    /// Increment for native parser corrections; older or absent revisions use bounded reparsing.
+    static let currentCodexParserRevision = 13
+
     var mtimeUnixMs: Int64
     var size: Int64
     var days: [String: [String: [Int]]]
@@ -293,6 +354,10 @@ struct CostUsageFileUsage: Codable, Equatable {
     var codexTurnIDs: [String]?
     var codexWorkspaceContentFingerprint: String?
     var codexRows: [CostUsageScanner.CodexUsageRow]?
+    var codexNextUsageRowIndex: Int?
+    var codexPendingPricing: [String: CostUsageScanner.CodexPricingEvidence]?
+    var codexPendingSourcePricing: [CostUsageScanner.CodexSourcePricingKey: CostUsageScanner.CodexPricingEvidence]?
+    var codexPendingSourcePricingAnchor: CostUsageCodexTokenIndexAnchor?
     var codexTokenSnapshots: [CostUsageCodexTokenSnapshot]?
     var codexTokenCheckpoints: [CostUsageCodexTokenCheckpoint]?
     var codexTokenTimestampsMonotonic: Bool?
@@ -302,10 +367,17 @@ struct CostUsageFileUsage: Codable, Equatable {
     var codexScanTargetSize: Int64?
     var codexScanComplete: Bool?
     var codexJSONLResumeState: CostUsageJsonl.ResumeState?
+    var codexForkAccountingState: CostUsageScanner.CodexForkAccountingState?
+    var codexRequestLedgerState: CostUsageScanner.CodexRequestLedgerState?
     var codexBufferedSubagentLines: [CostUsageScanner.CodexBufferedFastLine]?
     var codexBufferedUnresolvedForkLines: [CostUsageScanner.CodexBufferedFastLine]?
     /// Only the store's private read-view adapter uses presence without loading replay bodies.
     var codexReadRetryBufferPresence: CostUsageCodexRetryBufferPresence?
+    var codexParserRevision: Int? = CostUsageFileUsage.currentCodexParserRevision
+
+    var hasCurrentCodexParser: Bool {
+        self.codexParserRevision == Self.currentCodexParserRevision
+    }
 
     var hasBufferedCodexSubagentLines: Bool {
         self.codexReadRetryBufferPresence?.subagent ?? (self.codexBufferedSubagentLines?.isEmpty == false)
@@ -318,6 +390,16 @@ struct CostUsageFileUsage: Codable, Equatable {
     var hasBufferedCodexForkRetryLines: Bool {
         self.hasBufferedCodexSubagentLines || self.hasBufferedCodexUnresolvedForkLines
     }
+
+    var hasPendingCodexForkRetry: Bool {
+        // A confirmed missing parent settles scheduling. Keep its buffer for dependency changes.
+        self.hasBufferedCodexForkRetryLines
+            && (self.forkBaselineDependencyKey == nil || !CostUsageScanner.isUnresolvedMissingParentFork(self))
+    }
+
+    var hasPendingCodexScanWork: Bool {
+        self.codexScanComplete == false || self.hasPendingCodexForkRetry
+    }
 }
 
 struct CostUsageCodexSessionMetadata: Codable, Equatable {
@@ -327,10 +409,12 @@ struct CostUsageCodexSessionMetadata: Codable, Equatable {
     var title: String?
     var startedAtUnixMs: Int64?
     var latestActivityUnixMs: Int64?
+    /// Whether the leaf `session_meta` named a ChatGPT creator account. `nil` means not yet parsed.
+    var hasCreatorAccount: Bool?
 
     var isEmpty: Bool {
         self.sessionId == nil && self.forkedFromId == nil && self.cwd == nil && self.title == nil
-            && self.startedAtUnixMs == nil && self.latestActivityUnixMs == nil
+            && self.startedAtUnixMs == nil && self.latestActivityUnixMs == nil && self.hasCreatorAccount == nil
     }
 
     func merging(_ newer: CostUsageCodexSessionMetadata) -> CostUsageCodexSessionMetadata {
@@ -339,26 +423,9 @@ struct CostUsageCodexSessionMetadata: Codable, Equatable {
             forkedFromId: newer.forkedFromId ?? self.forkedFromId,
             cwd: newer.cwd ?? self.cwd,
             title: newer.title ?? self.title,
-            startedAtUnixMs: Self.earlier(self.startedAtUnixMs, newer.startedAtUnixMs),
-            latestActivityUnixMs: Self.later(self.latestActivityUnixMs, newer.latestActivityUnixMs))
-    }
-
-    private static func earlier(_ lhs: Int64?, _ rhs: Int64?) -> Int64? {
-        switch (lhs, rhs) {
-        case let (lhs?, rhs?): min(lhs, rhs)
-        case let (lhs?, nil): lhs
-        case let (nil, rhs?): rhs
-        case (nil, nil): nil
-        }
-    }
-
-    private static func later(_ lhs: Int64?, _ rhs: Int64?) -> Int64? {
-        switch (lhs, rhs) {
-        case let (lhs?, rhs?): max(lhs, rhs)
-        case let (lhs?, nil): lhs
-        case let (nil, rhs?): rhs
-        case (nil, nil): nil
-        }
+            startedAtUnixMs: [self.startedAtUnixMs, newer.startedAtUnixMs].compactMap(\.self).min(),
+            latestActivityUnixMs: [self.latestActivityUnixMs, newer.latestActivityUnixMs].compactMap(\.self).max(),
+            hasCreatorAccount: newer.hasCreatorAccount ?? self.hasCreatorAccount)
     }
 }
 
@@ -367,13 +434,6 @@ struct CostUsageCodexTotals: Codable, Equatable {
     var cached: Int
     var output: Int
     var reasoning: Int?
-
-    init(input: Int, cached: Int, output: Int, reasoning: Int? = nil) {
-        self.input = input
-        self.cached = cached
-        self.output = output
-        self.reasoning = reasoning
-    }
 }
 
 struct CostUsageCodexTokenSnapshot: Codable, Equatable {

@@ -9,11 +9,13 @@ extension StatusItemController {
         let menuID = ObjectIdentifier(menu)
         let generation = self.menuSession.beginTrackingSession(menuID)
         (menu as? StatusItemMenu)?.menuInteractionGeneration = generation
+        self.refreshStatusItemContentForColorMode()
     }
 
     func endMenuTrackingSession(for menu: NSMenu) {
         (menu as? StatusItemMenu)?.menuInteractionGeneration = nil
         self.menuSession.endTrackingSession(ObjectIdentifier(menu))
+        self.refreshStatusItemContentForColorMode()
     }
 
     private func rootMenu(for menu: NSMenu) -> NSMenu {
@@ -157,10 +159,64 @@ extension StatusItemController {
     }
 
     func clearMenuHighlight(_ key: ObjectIdentifier) {
+        self.keyboardHighlightedMenus.remove(key)
         if let highlightedView = self.highlightedMenuItems.removeValue(forKey: key)?.view {
             (highlightedView as? MenuCardHighlighting)?.setHighlighted(false)
         }
         self.nativeHighlightDeferredMenuRebuilds.removeValue(forKey: key)
+    }
+
+    func menu(_ menu: NSMenu, willHighlight item: NSMenuItem?) {
+        self.menu(menu, willHighlight: item, eventType: NSApp?.currentEvent?.type)
+    }
+
+    func menu(_ menu: NSMenu, willHighlight item: NSMenuItem?, eventType: NSEvent.EventType?) {
+        let key = ObjectIdentifier(menu)
+        let wasKeyboardHighlighted = self.keyboardHighlightedMenus.contains(key)
+        switch eventType {
+        case .keyDown:
+            self.keyboardHighlightedMenus.insert(key)
+        case .mouseMoved, .mouseEntered, .mouseExited, .leftMouseDown, .leftMouseUp, .leftMouseDragged,
+             .rightMouseDown, .rightMouseUp, .rightMouseDragged, .otherMouseDown, .otherMouseUp,
+             .otherMouseDragged, .scrollWheel:
+            self.keyboardHighlightedMenus.remove(key)
+        default:
+            break
+        }
+        let previous = self.highlightedMenuItems[key]
+        guard previous !== item else {
+            if wasKeyboardHighlighted != self.keyboardHighlightedMenus.contains(key), let item {
+                self.applyMenuCardHighlight(item, highlighted: true)
+            }
+            return
+        }
+        let previousWasNative = self.isNativeMenuItemHighlighted(in: menu)
+
+        if let previous {
+            (previous.view as? MenuCardHighlighting)?.setHighlighted(false)
+        }
+
+        if let item,
+           item.isEnabled,
+           (item.view as? MenuCardHighlighting)?.allowsMenuHighlight != false
+        {
+            self.highlightedMenuItems[key] = item
+            self.applyMenuCardHighlight(item, highlighted: true)
+        } else {
+            self.highlightedMenuItems.removeValue(forKey: key)
+        }
+
+        if previousWasNative, !self.isNativeMenuItemHighlighted(in: menu) {
+            self.resumeMenuRebuildDeferredForNativeHighlightIfNeeded(menu)
+        }
+    }
+
+    func applyMenuCardHighlight(_ item: NSMenuItem, highlighted: Bool) {
+        let view = item.view as? MenuCardHighlighting
+        // Keep native selection tracking intact; only pointer-driven custom-row rendering is optional.
+        let keyboardSelected = item.menu.map { self.keyboardHighlightedMenus.contains(ObjectIdentifier($0)) } ?? false
+        view?.setHighlighted(highlighted && item.isEnabled && view?.allowsMenuHighlight != false
+            && (self.settings.highlightMenuCardsOnHover || keyboardSelected))
     }
 
     func removeMenuLifecycleState(_ key: ObjectIdentifier) {
@@ -427,6 +483,35 @@ extension StatusItemController {
             allowStaleContentDuringDataRefresh: true)
     }
 
+    /// Marks the open root menu stale and schedules one in-place rebuild that is allowed to run now.
+    /// Unlike `refreshOpenMenuIfStillVisible`, the rebuild is not deferred for the whole tracking
+    /// session, so delayed updates (e.g. account-scoped refresh phases, #3709) reach the open menu;
+    /// unlike `rebuildOpenMenuIfStillVisible`, the content version is bumped so stale-state and
+    /// hosted-submenu close reconciliation still observe the change.
+    func scheduleOpenRootMenuDataRebuildIfStillVisible(
+        _ menu: NSMenu,
+        provider: UsageProvider,
+        isCurrent: (@MainActor () -> Bool)? = nil)
+    {
+        let key = ObjectIdentifier(menu)
+        guard self.openMenus[key] != nil else { return }
+        guard !self.isHostedSubviewMenu(menu) else { return }
+        let stillSelected: @MainActor () -> Bool = { [weak self, weak menu] in
+            guard let self, let menu else { return false }
+            guard isCurrent?() ?? true else { return false }
+            if let selection = self.resolvedMergedMenuSelection(
+                enabledProviders: self.store.enabledFirstPartyProvidersForDisplay())
+            {
+                return selection == .provider(provider.instanceID)
+            }
+            return self.menuProvider(for: menu) == provider
+        }
+        // Late account data must not replace a newer provider/Overview selection request.
+        guard stillSelected() else { return }
+        self.invalidateMenus(refreshOpenMenus: false, allowStaleContentDuringDataRefresh: true)
+        self.scheduleTrackingMenuRebuildIfStillVisible(menu, provider: provider, beforeRebuild: stillSelected)
+    }
+
     func rebuildOpenMenuIfStillVisible(_ menu: NSMenu, provider: UsageProvider?) {
         let key = ObjectIdentifier(menu)
         guard self.openMenus[key] != nil else { return }
@@ -470,17 +555,14 @@ extension StatusItemController {
         self.nativeHighlightDeferredMenuRebuilds.removeValue(forKey: key)
         self.scheduleOpenMenuRebuildIfStillVisible(
             menu,
-            provider: deferredRebuild.provider)
+            provider: deferredRebuild.provider,
+            duringTracking: true)
     }
 
     func refreshOpenMenusIfNeeded() {
         guard self.isMenuRefreshEnabled else { return }
         guard !self.openMenus.isEmpty else { return }
         self.refreshOpenMenusIfNeeded(allowsParentRebuild: false)
-    }
-
-    func refreshOpenMenusForStructureChange() {
-        self.refreshOpenMenusAllowingParentRebuild()
     }
 
     func refreshOpenMenusAfterHostedSubviewClose() {
@@ -491,7 +573,7 @@ extension StatusItemController {
             return
         }
         self.parentMenuRebuildPendingAfterHostedSubviewClose = false
-        self.refreshOpenMenusIfNeeded(allowsParentRebuild: true)
+        self.refreshOpenMenusIfNeeded(allowsParentRebuild: true, duringTracking: true)
         self.resumeParentMenuRebuildsDeferredForNativeHighlightAfterHostedSubviewClose()
     }
 
@@ -541,8 +623,8 @@ extension StatusItemController {
 
     private func refreshOpenMenusIfNeeded(
         allowsParentRebuild: Bool,
-        deferParentRebuildDuringTracking: Bool = false,
-        respectsParentRebuildDeferral: Bool = false)
+        duringTracking: Bool = false,
+        deferParentRebuildDuringTracking: Bool = false)
     {
         var orphanedKeys: [ObjectIdentifier] = []
         let hasOpenHostedSubviewMenu = self.hasOpenHostedSubviewMenu()
@@ -554,8 +636,8 @@ extension StatusItemController {
             self.refreshOpenMenuIfNeeded(
                 menu,
                 allowsParentRebuild: allowsParentRebuild,
+                duringTracking: duringTracking,
                 deferParentRebuildDuringTracking: deferParentRebuildDuringTracking,
-                respectsParentRebuildDeferral: respectsParentRebuildDeferral,
                 hasOpenHostedSubviewMenu: hasOpenHostedSubviewMenu)
         }
         self.removeOrphanedOpenMenuEntries(orphanedKeys)
@@ -564,8 +646,8 @@ extension StatusItemController {
     private func refreshOpenMenuIfNeeded(
         _ menu: NSMenu,
         allowsParentRebuild: Bool,
+        duringTracking: Bool,
         deferParentRebuildDuringTracking: Bool,
-        respectsParentRebuildDeferral: Bool,
         hasOpenHostedSubviewMenu: Bool)
     {
         if self.isHostedSubviewMenu(menu) {
@@ -580,14 +662,11 @@ extension StatusItemController {
             self.menuSession.deferParentRebuild(key)
             return
         }
-        if respectsParentRebuildDeferral, self.menuSession.isParentRebuildDeferred(key) {
-            return
-        }
         self.menuSession.clearParentRebuildDeferral(key)
         guard !hasOpenHostedSubviewMenu else { return }
 
         let provider = self.menuProvider(for: menu)
-        self.scheduleOpenMenuRebuildIfStillVisible(menu, provider: provider)
+        self.scheduleOpenMenuRebuildIfStillVisible(menu, provider: provider, duringTracking: duringTracking)
     }
 
     private func removeOrphanedOpenMenuEntries(_ keys: [ObjectIdentifier]) {

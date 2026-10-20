@@ -5,7 +5,7 @@ import SwiftUI
 enum ShareStatsRenderer {
     static func pngData(for payload: ShareStatsPayload) -> Data? {
         let size = ShareStatsCardView.size
-        let view = NSHostingView(rootView: ShareStatsCardView(payload: payload))
+        let view = NSHostingView(rootView: ShareStatsCardView(payload: payload).codexBarLocalized())
         view.frame = CGRect(origin: .zero, size: size)
         view.layoutSubtreeIfNeeded()
 
@@ -35,10 +35,12 @@ enum ShareStatsRenderer {
 
 @MainActor
 enum ShareStatsExporter {
-    static func copyImage(_ payload: ShareStatsPayload) -> Bool {
+    static func copyImage(
+        _ payload: ShareStatsPayload,
+        pasteboard: NSPasteboard = .general) -> Bool
+    {
         guard let data = ShareStatsRenderer.pngData(for: payload),
               let image = NSImage(data: data) else { return false }
-        let pasteboard = NSPasteboard.general
         let item = NSPasteboardItem()
         item.setData(data, forType: .png)
         if let tiff = image.tiffRepresentation {

@@ -19,8 +19,10 @@ struct ClaudeProviderImplementation: ProviderImplementation {
     @MainActor
     func observeSettings(_ settings: SettingsStore) {
         _ = settings.claudeUsageDataSource
+        _ = settings.claudeWorkspaceSpendEnabled
         _ = settings.claudeAdminAPIKey
         _ = settings.claudeCookieSource
+        _ = settings.claudeDesktopCookiesEnabled
         _ = settings.claudeCookieHeader
         _ = settings.claudeOAuthKeychainPromptMode
         _ = settings.claudeOAuthDirectKeychainReadAllowed
@@ -29,6 +31,7 @@ struct ClaudeProviderImplementation: ProviderImplementation {
         _ = settings.claudeSwapEnabled
         _ = settings.claudeSwapShowSingleAccount
         _ = settings.claudeSwapExecutablePath
+        _ = settings.claudeSwapSource
     }
 
     @MainActor
@@ -85,19 +88,37 @@ struct ClaudeProviderImplementation: ProviderImplementation {
                 context.settings.claudeOAuthPromptFreeCredentialsEnabled = enabled
             })
 
-        let claudeSwapBinding = Binding(
-            get: { context.settings.claudeSwapEnabled },
-            set: { context.settings.claudeSwapEnabled = $0 })
-        let claudeSwapShowSingleAccountBinding = Binding(
-            get: { context.settings.claudeSwapShowSingleAccount },
-            set: { context.settings.claudeSwapShowSingleAccount = $0 })
+        let claudeSwapBinding = context.binding(\.claudeSwapEnabled)
+        let claudeSwapShowSingleAccountBinding = context.binding(\.claudeSwapShowSingleAccount)
+        let claudeSwapSetup = ClaudeSwapSetupText(source: context.settings.claudeSwapSource)
+        let claudeSwapExecutableField = ProviderSettingsFieldDescriptor(
+            id: "claude-swap-executable-path",
+            title: claudeSwapSetup.title,
+            subtitle: claudeSwapSetup.subtitle,
+            kind: .plain,
+            placeholder: claudeSwapSetup.placeholder,
+            binding: context.binding(\.claudeSwapExecutablePath),
+            actions: [],
+            isVisible: nil)
 
         return [
             ProviderSettingsToggleDescriptor(
-                id: "claude-model-scoped-weekly-usage-visible",
-                title: "Show model-specific weekly usage in widgets",
-                subtitle: "Shows model-specific Claude quotas, such as Fable, in desktop widgets.",
-                binding: context.boolBinding(\.claudeModelScopedWeeklyUsageVisible),
+                id: "claude-desktop-cookies",
+                title: "Use Claude desktop app cookies",
+                subtitle: "For Web usage, follow the account signed into Claude.app instead of a browser.",
+                binding: context.binding(\.claudeDesktopCookiesEnabled),
+                statusText: nil,
+                actions: [],
+                isVisible: { context.settings.claudeCookieSource == .auto },
+                isEnabled: nil,
+                onChange: nil,
+                onAppDidBecomeActive: nil,
+                onAppearWhenEnabled: nil),
+            ProviderSettingsToggleDescriptor(
+                id: "claude-workspace-spend",
+                title: "Show workspace spend",
+                subtitle: "Break down Admin API spend by workspace over the last 30 days.",
+                binding: context.binding(\.claudeWorkspaceSpendEnabled),
                 statusText: nil,
                 actions: [],
                 isVisible: nil,
@@ -106,17 +127,14 @@ struct ClaudeProviderImplementation: ProviderImplementation {
                 onAppDidBecomeActive: nil,
                 onAppearWhenEnabled: nil),
             ProviderSettingsToggleDescriptor(
-                id: "claude-daily-routines-usage-visible",
-                title: "Show Daily Routines usage",
-                subtitle: [
-                    "Shows the Daily Routines quota row in the menu and provider preview.",
-                    "Requires optional credits and extra usage in Display settings.",
-                ].joined(separator: " "),
-                binding: context.boolBinding(\.claudeDailyRoutinesUsageVisible),
+                id: "claude-model-scoped-weekly-usage-visible",
+                title: "Show model-specific weekly usage in widgets",
+                subtitle: "Shows model-specific Claude quotas, such as Fable, in desktop widgets.",
+                binding: context.binding(\.claudeModelScopedWeeklyUsageVisible),
                 statusText: nil,
                 actions: [],
                 isVisible: nil,
-                isEnabled: { context.settings.showOptionalCreditsAndExtraUsage },
+                isEnabled: nil,
                 onChange: nil,
                 onAppDidBecomeActive: nil,
                 onAppearWhenEnabled: nil),
@@ -127,9 +145,7 @@ struct ClaudeProviderImplementation: ProviderImplementation {
                     "Reads Claude Code's Keychain item for OAuth usage; macOS may ask for permission.",
                     "Off: CodexBar never touches Claude Code's credentials and uses the Claude CLI instead.",
                 ].joined(separator: " "),
-                binding: Binding(
-                    get: { context.settings.claudeOAuthDirectKeychainReadAllowed },
-                    set: { context.settings.claudeOAuthDirectKeychainReadAllowed = $0 }),
+                binding: context.binding(\.claudeOAuthDirectKeychainReadAllowed),
                 statusText: nil,
                 actions: [],
                 isVisible: nil,
@@ -152,11 +168,11 @@ struct ClaudeProviderImplementation: ProviderImplementation {
             ProviderSettingsToggleDescriptor(
                 id: "claude-swap-accounts",
                 title: "Read accounts from claude-swap",
-                subtitle: "Shows usage and lets you switch accounts through `cswap`. " +
-                    "Credentials stay managed by claude-swap; CodexBar never reads them.",
+                subtitle: claudeSwapSetup.toggleSubtitle,
                 binding: claudeSwapBinding,
                 statusText: { Self.claudeSwapStatusText(store: context.store, settings: context.settings) },
                 actions: [],
+                inlineFields: [claudeSwapExecutableField],
                 isVisible: nil,
                 isEnabled: nil,
                 onChange: nil,
@@ -181,11 +197,11 @@ struct ClaudeProviderImplementation: ProviderImplementation {
     private static func claudeSwapStatusText(store: UsageStore, settings: SettingsStore) -> String? {
         guard settings.claudeSwapEnabled else { return nil }
         if settings.claudeSwapExecutablePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "Set the cswap executable path below."
+            return ClaudeSwapSetupText(source: settings.claudeSwapSource).missingPathStatus
         }
         var parts: [String] = []
         if let version = store.claudeSwapDetectedVersion {
-            parts.append("claude-swap \(version)")
+            parts.append("\(settings.claudeSwapSource.label) \(version)")
         }
         if let error = store.claudeSwapLastError {
             parts.append(error)
@@ -199,29 +215,14 @@ struct ClaudeProviderImplementation: ProviderImplementation {
 
     @MainActor
     func settingsPickers(context: ProviderSettingsContext) -> [ProviderSettingsPickerDescriptor] {
-        let usageBinding = Binding(
-            get: { context.settings.claudeUsageDataSource.rawValue },
-            set: { raw in
-                context.settings.claudeUsageDataSource = ClaudeUsageDataSource(rawValue: raw) ?? .auto
-            })
-        let cookieBinding = Binding(
-            get: { context.settings.claudeCookieSource.rawValue },
-            set: { raw in
-                context.settings.claudeCookieSource = ProviderCookieSource(rawValue: raw) ?? .auto
-            })
-        let keychainPromptPolicyBinding = Binding(
-            get: { context.settings.claudeOAuthKeychainPromptMode.rawValue },
-            set: { raw in
-                context.settings.claudeOAuthKeychainPromptMode = ClaudeOAuthKeychainPromptMode(rawValue: raw)
-                    ?? .onlyOnUserAction
-            })
+        let usageBinding = context.rawValueBinding(\.claudeUsageDataSource, fallback: .auto)
+        let keychainPromptPolicyBinding = context.rawValueBinding(
+            \.claudeOAuthKeychainPromptMode,
+            fallback: .onlyOnUserAction)
 
         let usageOptions = ClaudeUsageDataSource.allCases.map {
             ProviderSettingsPickerOption(id: $0.rawValue, title: $0.displayName)
         }
-        let cookieOptions = ProviderCookieSourceUI.options(
-            allowsOff: false,
-            keychainDisabled: context.settings.debugDisableKeychainAccess)
         let keychainPromptPolicyOptions: [ProviderSettingsPickerOption] = [
             ProviderSettingsPickerOption(
                 id: ClaudeOAuthKeychainPromptMode.never.rawValue,
@@ -233,14 +234,6 @@ struct ClaudeProviderImplementation: ProviderImplementation {
                 id: ClaudeOAuthKeychainPromptMode.always.rawValue,
                 title: "Always allow prompts"),
         ]
-        let cookieSubtitle: () -> String? = {
-            ProviderCookieSourceUI.subtitle(
-                source: context.settings.claudeCookieSource,
-                keychainDisabled: context.settings.debugDisableKeychainAccess,
-                auto: "Automatic imports browser cookies for the web API.",
-                manual: "Paste a Cookie header from a claude.ai request.",
-                off: "Claude cookies are disabled.")
-        }
         let keychainPromptPolicySubtitle: () -> String? = {
             if context.settings.debugDisableKeychainAccess {
                 return "Global Keychain access is disabled in Advanced, so this setting is currently inactive."
@@ -273,16 +266,35 @@ struct ClaudeProviderImplementation: ProviderImplementation {
                 isEnabled: { !context.settings.debugDisableKeychainAccess },
                 onChange: nil),
             ProviderSettingsPickerDescriptor(
+                id: "claude-swap-source",
+                title: "Source",
+                subtitle: "",
+                binding: context.rawValueBinding(\.claudeSwapSource, fallback: .claudeSwap),
+                // Tool names, not prose: they stay untranslated in every locale.
+                options: ClaudeSwapAccountSource.allCases.map {
+                    ProviderSettingsPickerOption(id: $0.rawValue, title: $0.label)
+                },
+                isVisible: { context.settings.claudeSwapEnabled },
+                onChange: nil),
+            ProviderCookieSourceUI.picker(
                 id: "claude-cookie-source",
+                context: context,
+                source: \.claudeCookieSource,
+                allowsOff: false,
+                subtitles: {
+                    .init(
+                        auto: L("Automatic imports browser cookies for the web API."),
+                        manual: L("Paste a Cookie header from %@.", "a claude.ai request"),
+                        off: L("%@ cookies are disabled.", "Claude"))
+                },
                 title: "Claude cookies",
-                subtitle: "Automatic imports browser cookies for the web API.",
-                dynamicSubtitle: cookieSubtitle,
-                binding: cookieBinding,
-                options: cookieOptions,
                 isVisible: nil,
                 onChange: nil,
                 trailingText: {
-                    ProviderCookieSourceUI.cachedTrailingText(provider: .claude)
+                    if context.settings.claudeDesktopCookiesEnabled, context.settings.claudeCookieSource == .auto {
+                        return L("Claude desktop app")
+                    }
+                    return ProviderCookieSourceUI.cachedTrailingText(provider: .claude)
                 }),
         ]
     }
@@ -296,20 +308,9 @@ struct ClaudeProviderImplementation: ProviderImplementation {
                 subtitle: "Stored in ~/.codexbar/config.json. Requires an Anthropic Admin API key.",
                 kind: .secure,
                 placeholder: "sk-ant-admin...",
-                binding: context.stringBinding(\.claudeAdminAPIKey),
+                binding: context.binding(\.claudeAdminAPIKey),
                 actions: [],
-                isVisible: nil,
-                onActivate: nil),
-            ProviderSettingsFieldDescriptor(
-                id: "claude-swap-executable-path",
-                title: "claude-swap executable",
-                subtitle: "Path to the cswap executable (github.com/realiti4/claude-swap).",
-                kind: .plain,
-                placeholder: "~/.local/bin/cswap",
-                binding: context.stringBinding(\.claudeSwapExecutablePath),
-                actions: [],
-                isVisible: { context.settings.claudeSwapEnabled },
-                onActivate: nil),
+                isVisible: nil),
         ]
     }
 
@@ -360,6 +361,9 @@ struct ClaudeProviderImplementation: ProviderImplementation {
             return ("Open Claude Settings…", .providerSettings(.claude))
         }
         if self.shouldOpenBrowserForWebSessionError(context: context) {
+            if context.settings.claudeDesktopCookiesEnabled {
+                return ("Open Claude Settings…", .providerSettings(.claude))
+            }
             return ("Re-login at claude.ai", .loginToProvider(url: "https://claude.ai/"))
         }
         if self.shouldOpenTerminalForOAuthError(store: context.store) {
@@ -401,6 +405,7 @@ struct ClaudeProviderImplementation: ProviderImplementation {
         let sessionErrors = [
             ClaudeWebAPIFetcher.FetchError.unauthorized.localizedDescription,
             ClaudeWebAPIFetcher.FetchError.noSessionKeyFound.localizedDescription,
+            ClaudeWebAPIFetcher.FetchError.noDesktopSessionKeyFound.localizedDescription,
             ClaudeWebAPIFetcher.FetchError.invalidSessionKey.localizedDescription,
         ]
         if sessionErrors.contains(error) {
@@ -424,5 +429,37 @@ struct ClaudeProviderImplementation: ProviderImplementation {
             return true
         }
         return false
+    }
+}
+
+/// Setup copy for the account-source toggle, its executable field and the empty-path status, chosen by the
+/// selected source so the instructions name the executable that will be run with that source's list arguments.
+/// Title, subtitle, placeholder and toggle subtitle are English catalog keys the settings rows localize; the
+/// status row renders its text as-is, so `missingPathStatus` is localized here.
+private struct ClaudeSwapSetupText {
+    let title: String
+    let subtitle: String
+    let placeholder: String
+    let toggleSubtitle: String
+    let missingPathStatus: String
+
+    init(source: ClaudeSwapAccountSource) {
+        switch source {
+        case .claudeSwap:
+            self.title = "claude-swap executable"
+            self.subtitle = "Path to the cswap executable (github.com/realiti4/claude-swap)."
+            self.placeholder = "~/.local/bin/cswap"
+            self.toggleSubtitle = "Shows usage and lets you switch accounts through `cswap`. " +
+                "Credentials stay managed by claude-swap; CodexBar never reads them."
+            self.missingPathStatus = L("Set the cswap executable path below.")
+        case .tcr:
+            // tcr picks the account for each request, so its list never offers a switch.
+            self.title = "tcr executable"
+            self.subtitle = "Path to the tcr executable (github.com/dhkts1/teamclaude-rs)."
+            self.placeholder = "/Applications/TcrBar.app/Contents/MacOS/tcr"
+            self.toggleSubtitle = "Shows usage from `tcr`; it does not switch accounts, because tcr picks " +
+                "the account for each request. Credentials stay managed by tcr; CodexBar never reads them."
+            self.missingPathStatus = L("Set the tcr executable path below.")
+        }
     }
 }

@@ -6,15 +6,17 @@ from __future__ import annotations
 import argparse
 import ctypes
 import errno
+import json
 import os
 from pathlib import Path
 import re
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 try:
     import fcntl
@@ -31,6 +33,8 @@ class TestSelection:
 
 @dataclass
 class RunStats:
+    execution_mode: str = "serial SwiftPM"
+    workers: int = 1
     discovered_selections: int = 0
     selected_selections: int = 0
     selected_groups: int = 0
@@ -53,6 +57,8 @@ class RunStats:
             shard = f"{self.shard_index + 1}/{self.shard_count}"
         return [
             ("Shard", shard),
+            ("Execution mode", self.execution_mode),
+            ("Workers", str(self.workers)),
             ("Group size", str(self.group_size)),
             ("Discovered selections", str(self.discovered_selections)),
             ("Selected selections", str(self.selected_selections)),
@@ -83,6 +89,7 @@ def parse_args() -> argparse.Namespace:
         help="fail immediately when a group exits without timing out",
     )
     parser.add_argument("--list-only", action="store_true")
+    parser.add_argument("--direct-workers", type=int, help="opt-in macOS direct test groups (1-8 workers; required on CI when requested)")
     parser.add_argument("--swift-command", default="swift")
     parser.add_argument("--swift-command-arg", action="append", default=[])
     return parser.parse_args()
@@ -436,17 +443,35 @@ def stop_unreaped_child(process: subprocess.Popen) -> None:
     process.wait(timeout=2)
 
 
-def run_command(command: list[str], timeout: int | None = None) -> int:
+CONTAINMENT_CAPABILITIES = ("waitid", "P_PID", "WEXITED", "WNOHANG", "WNOWAIT")
+
+
+def containment_support_error(capabilities: object = os) -> str | None:
     if sys.platform != "darwin" and not sys.platform.startswith("linux"):
-        raise RuntimeError("Swift test process containment requires macOS or Linux")
-    if not all(hasattr(os, name) for name in ("waitid", "P_PID", "WEXITED", "WNOHANG", "WNOWAIT")):
-        raise RuntimeError("Swift test process containment requires waitid with WNOWAIT")
+        return f"Swift test process containment requires macOS or Linux, not {sys.platform}."
+    missing = [name for name in CONTAINMENT_CAPABILITIES if not hasattr(capabilities, name)]
+    if not missing:
+        return None
+    # A version number alone does not tell the reader which build of python3 to reach for.
+    version = ".".join(str(part) for part in sys.version_info[:3])
+    return (
+        "Swift test process containment requires waitid with WNOWAIT. "
+        f"{sys.executable} is Python {version} and does not provide: {', '.join(missing)}. "
+        "Run make test and make check with a python3 that provides them, "
+        "for example Homebrew python@3.14 placed first on PATH."
+    )
+
+
+def run_command(command: list[str], timeout: int | None = None, environment: dict[str, str] | None = None) -> int:
+    error = containment_support_error()
+    if error is not None:
+        raise RuntimeError(error)
     print(f"+ {' '.join(command)}", flush=True)
     started = time.monotonic()
     ownership = None
     process = None
     try:
-        process = subprocess.Popen(command, start_new_session=True)
+        process = subprocess.Popen(command, start_new_session=True, env=environment)
         root = test_process(process.pid)
         if root is None:
             exited = unreaped_exit_code(process) is not None
@@ -514,13 +539,14 @@ def sparkle_runtime_matches_source(destination: Path, source: Path) -> bool:
         return False
 
 
-def repair_sparkle_test_runtime(swift_command: list[str]) -> bool:
+def repair_sparkle_test_runtime(swift_command: list[str], environment: dict[str, str] | None = None) -> bool:
     if fcntl is None:
         return False
     result = subprocess.run(
         [*swift_command, "build", "--show-bin-path"],
         capture_output=True,
         text=True,
+        env=environment,
     )
     if result.returncode != 0:
         return False
@@ -558,13 +584,16 @@ def repair_sparkle_test_runtime(swift_command: list[str]) -> bool:
         return sparkle_runtime_matches_source(destination, source)
 
 
-def swift_test_list(swift_command: list[str]) -> list[TestSelection]:
+def swift_test_list(swift_command: list[str], inventory: list[str] | None = None) -> list[TestSelection]:
     command = [*swift_command, "test", "list"]
-    result = subprocess.run(command, capture_output=True, text=True)
-    if result.returncode != 0 and is_missing_sparkle_runtime_failure(result):
-        if repair_sparkle_test_runtime(swift_command):
-            print("Recovered SwiftPM Sparkle test runtime; retrying discovery once.", flush=True)
-            result = subprocess.run(command, capture_output=True, text=True)
+    # Listing loads test products, so it gets a private home like test execution.
+    with tempfile.TemporaryDirectory(prefix="codexbar-test-discovery-") as home:
+        environment = os.environ | {"HOME": home, "CFFIXED_USER_HOME": home}
+        result = subprocess.run(command, capture_output=True, text=True, env=environment)
+        if result.returncode != 0 and is_missing_sparkle_runtime_failure(result):
+            if repair_sparkle_test_runtime(swift_command, environment=environment):
+                print("Recovered SwiftPM Sparkle test runtime; retrying discovery once.", flush=True)
+                result = subprocess.run(command, capture_output=True, text=True, env=environment)
     if result.returncode != 0:
         print(f"+ {swift_command[0]} test list", flush=True)
         if result.stdout:
@@ -572,6 +601,8 @@ def swift_test_list(swift_command: list[str]) -> list[TestSelection]:
         if result.stderr:
             print(result.stderr, end="" if result.stderr.endswith("\n") else "\n", file=sys.stderr, flush=True)
         result.check_returncode()
+    if inventory is not None:
+        inventory.extend(line.strip() for line in result.stdout.splitlines() if line.strip())
     selections: set[TestSelection] = set()
     unknown: list[str] = []
     for raw_line in result.stdout.splitlines():
@@ -635,9 +666,33 @@ def print_timing_summary(stats: RunStats) -> None:
         print(f"- {field}: {value}", flush=True)
 
 
-def chunks(items: list[TestSelection], size: int) -> Iterable[list[TestSelection]]:
-    for index in range(0, len(items), size):
-        yield items[index : index + size]
+ISOLATED_SUITES = {
+    "CodexBarTests.CostUsageBoundedProgressTests",
+    "CodexBarTests.CostUsageCacheWideMigrationTests",
+    "CodexBarTests.CostUsageFairSchedulingTests",
+    "CodexBarTests.CostUsagePerformanceGateTests",
+    "CodexBarTests.KiroStatusProbeTests",
+    "CodexBarTests.StatusMenuTests",
+    "CodexBarTests.TTYIntegrationTests",
+}
+
+
+def test_groups(items: list[TestSelection], size: int) -> Iterable[list[TestSelection]]:
+    # Measured slow suites keep their own deadline instead of forcing a whole batch to retry.
+    pending: list[TestSelection] = []
+    for item in items:
+        if item.suite_name in ISOLATED_SUITES:
+            if pending:
+                yield pending
+                pending = []
+            yield [item]
+            continue
+        pending.append(item)
+        if len(pending) == size:
+            yield pending
+            pending = []
+    if pending:
+        yield pending
 
 
 def shard_groups(groups: list[list[TestSelection]], shard_index: int | None, shard_count: int | None) -> list[list[TestSelection]]:
@@ -659,28 +714,18 @@ def prioritized_suites(suites: list[TestSelection]) -> list[TestSelection]:
     return ordered
 
 
-def filtered_suites_for_environment(suites: list[TestSelection]) -> list[TestSelection]:
-    if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
-        return suites
-
-    # SwiftPM hangs before suite output for this executable-target suite on the Intel macOS runner.
-    # Linux CI still runs it in the full Swift test lane, and local macOS runs it directly.
-    skipped = {"CodexBarTests.CLIEntryTests"}
-    filtered = [suite for suite in suites if suite.suite_name not in skipped]
-    if len(filtered) != len(suites):
-        print(f"Skipping macOS CI-only suites: {', '.join(sorted(skipped))}", flush=True)
-    return filtered
-
-
 def filter_for(suites: list[TestSelection]) -> str:
     return rf"({'|'.join(suite.filter_pattern for suite in suites)})"
 
 
 def run_group(suites: list[TestSelection], timeout: int, swift_command: list[str]) -> int:
-    return run_command(
-        [*swift_command, "test", "--skip-build", "--no-parallel", "--filter", filter_for(suites)],
-        timeout=timeout,
-    )
+    # Like direct workers, each group gets a temporary HOME and CFFIXED_USER_HOME instead of the caller's.
+    with tempfile.TemporaryDirectory(prefix="codexbar-test-group-") as home:
+        return run_command(
+            [*swift_command, "test", "--skip-build", "--no-parallel", "--filter", filter_for(suites)],
+            timeout=timeout,
+            environment=os.environ | {"HOME": home, "CFFIXED_USER_HOME": home},
+        )
 
 
 def retry_selections_individually(
@@ -707,21 +752,33 @@ def main() -> int:
         shard_index=args.shard_index,
         shard_count=args.shard_count,
     )
+    if args.direct_workers is not None and not 1 <= args.direct_workers <= 8:
+        print("--direct-workers must be between 1 and 8", file=sys.stderr)
+        return 2
     if args.group_size < 1:
         print("--group-size must be positive", file=sys.stderr)
         return 2
+    # Discovery builds the package, so report an unusable interpreter before that cost.
+    # --list-only never runs a test command and keeps working without containment.
+    if not args.list_only:
+        error = containment_support_error()
+        if error is not None:
+            print(error, file=sys.stderr)
+            return 2
 
     swift_command = [args.swift_command, *args.swift_command_arg]
     result = 0
     try:
         discovery_started = time.monotonic()
         try:
-            suites = prioritized_suites(filtered_suites_for_environment(swift_test_list(swift_command)))
+            inventory: list[str] = []
+            discovered = swift_test_list(swift_command, inventory) if args.direct_workers is not None else swift_test_list(swift_command)
+            suites = prioritized_suites(discovered)
         finally:
             stats.discovery_seconds = time.monotonic() - discovery_started
         stats.discovered_selections = len(suites)
 
-        suite_groups = list(chunks(suites, args.group_size))
+        suite_groups = list(test_groups(suites, args.group_size))
         try:
             suite_groups = shard_groups(suite_groups, args.shard_index, args.shard_count)
         except ValueError as error:
@@ -750,6 +807,51 @@ def main() -> int:
         if not suite_groups:
             print("No test groups selected.", flush=True)
             return 0
+
+        # The same ordered manifest is printed for serial and direct execution.
+        for index, group in enumerate(suite_groups, start=1):
+            print(f"Selected group {index}: {json.dumps([selection.name for selection in group])}", flush=True)
+
+        if args.direct_workers is not None:
+            from direct_swift_test_groups import InventoryMismatch, pool_timeout, prepare_runtime
+            with tempfile.TemporaryDirectory(prefix="codexbar-direct-run-") as directory:
+                root = Path(directory)
+                groups = [[asdict(selection) for selection in group] for group in suite_groups]
+                try:
+                    runtime = prepare_runtime(swift_command, groups, inventory, root)
+                except InventoryMismatch as error:
+                    print(f"Direct mode refused: {error}", file=sys.stderr, flush=True)
+                    result = 2
+                    return result
+                except (ValueError, OSError, subprocess.SubprocessError) as error:
+                    if os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"):
+                        print(f"Direct mode refused on CI: {error}", file=sys.stderr, flush=True)
+                        result = 2
+                        return result
+                    print(f"Direct mode unavailable: {error} Falling back to serial SwiftPM.", flush=True)
+                else:
+                    stats.execution_mode = "direct"
+                    stats.workers = args.direct_workers
+                    print(f"Direct runtime verified {len(inventory)} test methods; using {args.direct_workers} workers.", flush=True)
+                    manifest = root / "manifest.json"
+                    manifest.write_text(json.dumps({"runtime": runtime, "groups": groups,
+                        "timeout": args.timeout, "workers": args.direct_workers,
+                        "retry_non_timeout_failures": args.retry_non_timeout_failures}))
+                    execution_started = time.monotonic()
+                    result = run_command([sys.executable, str(Path(__file__).with_name("direct_swift_test_groups.py")),
+                                          str(manifest)], timeout=pool_timeout(
+                                              groups, args.timeout, args.retry_non_timeout_failures,
+                                              len(runtime["products"])))
+                    report = root / "results.json"
+                    if report.is_file():
+                        records = json.loads(report.read_text())
+                        stats.first_pass_successful_groups = sum(record["first_code"] == 0 for record in records)
+                        stats.first_pass_failed_groups = sum(record["first_code"] != 0 for record in records)
+                        stats.full_group_retries = sum(record["full_retries"] for record in records)
+                        stats.isolated_selection_retries = sum(record["isolated_retries"] for record in records)
+                        stats.timed_out_groups = sum(record["timed_out"] for record in records)
+                        stats.recovered_groups = sum(record["first_code"] != 0 and record["code"] == 0 for record in records)
+                    return result
 
         execution_started = time.monotonic()
         for group_index, group in enumerate(suite_groups, start=1):

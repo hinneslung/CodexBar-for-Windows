@@ -74,12 +74,6 @@ extension UsageMenuCardView.Model {
             presentation.detailLeft = detail
         case .detail:
             presentation.detailText = detail
-        case .detailBySecondaryPresence:
-            if input.snapshot?.secondary != nil {
-                presentation.detailRight = detail
-            } else {
-                presentation.detailText = detail
-            }
         case .standard:
             break
         }
@@ -106,7 +100,7 @@ extension UsageMenuCardView.Model {
                let total = input.snapshot?.detailRow(label: "Credits total")?.value,
                total != "0"
             {
-                presentation.detailLeft = String(format: L("%@ of %@ credits left"), remaining, total)
+                presentation.detailText = String(format: L("%@ of %@ credits left"), remaining, total)
             }
         case .none, .requestQuota:
             break
@@ -126,9 +120,6 @@ extension UsageMenuCardView.Model {
             presentation.resetText = primary.resetDescription
         }
         if policy.hidesPrimaryResetWithoutDate, primary.resetsAt == nil {
-            presentation.resetText = nil
-        }
-        if policy.hidesPrimaryResetWithoutSecondary, input.snapshot?.secondary == nil {
             presentation.resetText = nil
         }
     }
@@ -235,36 +226,52 @@ extension UsageMenuCardView.Model {
         else {
             return PersonalInfoRedactor.redactEmails(in: detail, isEnabled: true)
         }
-        return PersonalInfoRedactor.redactEmails(in: "Team\(detail[separator.lowerBound...])", isEnabled: true)
+        return PersonalInfoRedactor.redactEmails(in: "\(L("Team"))\(detail[separator.lowerBound...])", isEnabled: true)
     }
 
-    /// Clears the pace stripe and the forecast text when the user hides pace.
-    /// Copies every `Metric` field so unrelated decorations (quota and workday
-    /// ticks) survive; dropping one here would silently disable them.
+    static func blockingQuotaMetrics(_ metrics: [Metric], input: Input, snapshot: UsageSnapshot) -> [Metric] {
+        guard let policy = ProviderDescriptorRegistry.descriptor(for: input.provider).presentation.menuCard
+            .blockingQuota,
+            let blocker = snapshot.extraRateWindows?.first(where: { $0.id == policy.windowID && $0.usageKnown })
+        else { return metrics }
+        return metrics.map { metric in
+            let window: RateWindow? = switch metric.id {
+            case "primary": snapshot.primary
+            case "secondary": snapshot.secondary
+            case "tertiary": snapshot.tertiary
+            default: snapshot.extraRateWindows?.first { $0.id == metric.id && $0.usageKnown }?.window
+            }
+            guard let window, !window.isSyntheticPlaceholder,
+                  let projection = RateWindow.bindingQuotaProjection(
+                      primary: window, bindingLanes: [blocker.window], now: input.now)
+            else { return metric }
+            var blocked = metric
+            blocked.percent = input.usageBarsShowUsed ? projection.usedPercent : 100 - projection.usedPercent
+            blocked.statusText = L(policy.message)
+            // The blocking quota's own row owns its reset; shorter resets cannot restore access.
+            blocked.resetText = nil
+            blocked.detailText = nil
+            blocked.detailLeftText = nil
+            blocked.detailRightText = nil
+            blocked.pacePercent = nil
+            blocked.sessionEquivalentDetail = nil
+            return blocked
+        }
+    }
+
+    /// Clear only pace fields, preserving unrelated quota and workday decorations.
     static func paceGatedMetrics(_ metrics: [Metric], paceVisible: Bool) -> [Metric] {
         guard !paceVisible else { return metrics }
         return metrics.map { metric in
-            // The detail slots are shared: providers such as Kiro, Copilot, and
-            // ZenMux put their own credit and reset text there. Clear them only
-            // when they carry a pace forecast.
-            Metric(
-                id: metric.id,
-                title: metric.title,
-                percent: metric.percent,
-                percentStyle: metric.percentStyle,
-                statusText: metric.statusText,
-                resetText: metric.resetText,
-                detailText: metric.detailText,
-                detailLeftText: metric.detailIsPaceDerived ? nil : metric.detailLeftText,
-                detailRightText: metric.detailIsPaceDerived ? nil : metric.detailRightText,
-                pacePercent: nil,
-                detailIsPaceDerived: metric.detailIsPaceDerived,
-                paceOnTop: metric.paceOnTop,
-                warningMarkerPercents: metric.warningMarkerPercents,
-                workdayMarkerPercents: metric.workdayMarkerPercents,
-                workdayTickAppearance: metric.workdayTickAppearance,
-                cardStyle: metric.cardStyle,
-                sessionEquivalentDetail: nil)
+            var result = metric
+            // Provider-owned balance and reset text shares these slots with pace forecasts.
+            if metric.detailIsPaceDerived {
+                result.detailLeftText = nil
+                result.detailRightText = nil
+            }
+            result.pacePercent = nil
+            result.sessionEquivalentDetail = nil
+            return result
         }
     }
 
@@ -275,27 +282,14 @@ extension UsageMenuCardView.Model {
     {
         guard hidePersonalInfo else { return metrics }
         return metrics.map { metric in
-            Metric(
-                id: metric.id,
-                title: PersonalInfoRedactor.redactEmails(in: metric.title, isEnabled: true) ?? metric.title,
-                percent: metric.percent,
-                percentStyle: metric.percentStyle,
-                statusText: PersonalInfoRedactor.redactEmails(in: metric.statusText, isEnabled: true),
-                resetText: PersonalInfoRedactor.redactEmails(in: metric.resetText, isEnabled: true),
-                detailText: Self.redactedMetricDetail(
-                    metric.detailText,
-                    provider: provider,
-                    metricID: metric.id),
-                detailLeftText: PersonalInfoRedactor.redactEmails(in: metric.detailLeftText, isEnabled: true),
-                detailRightText: PersonalInfoRedactor.redactEmails(in: metric.detailRightText, isEnabled: true),
-                pacePercent: metric.pacePercent,
-                detailIsPaceDerived: metric.detailIsPaceDerived,
-                paceOnTop: metric.paceOnTop,
-                warningMarkerPercents: metric.warningMarkerPercents,
-                workdayMarkerPercents: metric.workdayMarkerPercents,
-                workdayTickAppearance: metric.workdayTickAppearance,
-                cardStyle: metric.cardStyle,
-                sessionEquivalentDetail: metric.sessionEquivalentDetail)
+            var result = metric
+            result.title = PersonalInfoRedactor.redactEmails(in: metric.title, isEnabled: true) ?? metric.title
+            result.statusText = PersonalInfoRedactor.redactEmails(in: metric.statusText, isEnabled: true)
+            result.resetText = PersonalInfoRedactor.redactEmails(in: metric.resetText, isEnabled: true)
+            result.detailText = Self.redactedMetricDetail(metric.detailText, provider: provider, metricID: metric.id)
+            result.detailLeftText = PersonalInfoRedactor.redactEmails(in: metric.detailLeftText, isEnabled: true)
+            result.detailRightText = PersonalInfoRedactor.redactEmails(in: metric.detailRightText, isEnabled: true)
+            return result
         }
     }
 
@@ -334,6 +328,11 @@ extension UsageMenuCardView.Model {
             return [L("Quota estimated from local usage history")] + subscriptionNotes
         }
 
+        // Provider-specific by design: Muse browser-team quotas come from a user-selected dev.meta.ai team.
+        if input.provider == .muse, input.snapshot?.dataConfidence == .estimated {
+            return [L("Quota from the selected dev.meta.ai browser team")] + subscriptionNotes
+        }
+
         if let notes = self.apiProviderUsageNotes(input: input) {
             return notes + subscriptionNotes
         }
@@ -348,6 +347,9 @@ extension UsageMenuCardView.Model {
             self.providerDetails.isEmpty &&
             self.openAIAPIUsage == nil &&
             self.inlineUsageDashboard == nil &&
+            self.throughput == nil &&
+            self.limitResetCredits == nil &&
+            self.cloudCredits == nil &&
             self.creditsRemaining == nil &&
             self.providerCost == nil &&
             self.tokenUsage == nil &&
@@ -360,25 +362,44 @@ extension UsageMenuCardView.Model {
             !self.providerDetails.isEmpty ||
             self.openAIAPIUsage != nil ||
             self.inlineUsageDashboard != nil ||
-            self.codexResetCredits != nil ||
+            self.throughput != nil ||
+            self.limitResetCredits != nil ||
+            self.cloudCredits != nil ||
             self.placeholder != nil
+    }
+
+    /// The cloud-credit row only needs a divider when another usage row is drawn before it.
+    var hasUsageContentAboveCloudCredits: Bool {
+        !self.metrics.isEmpty ||
+            !self.usageNotes.isEmpty ||
+            !self.providerDetails.isEmpty ||
+            self.inlineUsageDashboard != nil ||
+            self.throughput != nil ||
+            self.limitResetCredits != nil
+    }
+
+    func showsOverviewSupplementalContent(compact: Bool) -> Bool {
+        !compact || self.metrics.isEmpty
     }
 
     var creditsOnlyInlineUsageDashboard: Bool {
         self.creditsText != nil &&
+            self.throughput == nil &&
             self.inlineUsageDashboard != nil &&
             self.metrics.isEmpty &&
             self.usageNotes.isEmpty &&
             self.providerDetails.isEmpty &&
             self.openAIAPIUsage == nil &&
-            self.codexResetCredits == nil &&
+            self.limitResetCredits == nil &&
+            self.cloudCredits == nil &&
             self.placeholder == nil
     }
 
     var usesStackedDetailLayout: Bool {
         !self.metrics.isEmpty ||
             self.creditsText != nil ||
-            self.codexResetCredits != nil ||
+            self.limitResetCredits != nil ||
+            self.cloudCredits != nil ||
             self.providerCost != nil ||
             self.tokenUsage != nil
     }
@@ -407,15 +428,20 @@ extension UsageMenuCardView.Model {
               self.accountIdentityFingerprint == candidate.accountIdentityFingerprint,
               !includeMetrics || self.metrics.count == candidate.metrics.count,
               self.usageNotes == candidate.usageNotes,
+              self.throughput?.summaryLine == candidate.throughput?.summaryLine,
+              self.throughput?.presentation?.action == candidate.throughput?.presentation?.action,
+              self.throughput?.presentation?.limitLine == candidate.throughput?.presentation?.limitLine,
               self.providerDetails == candidate.providerDetails,
               (self.openAIAPIUsage == nil) == (candidate.openAIAPIUsage == nil),
+              self.creditsShowProgress == candidate.creditsShowProgress,
               Self.hasCompatibleCreditsLayout(
                   currentText: self.creditsText,
                   currentRemaining: self.creditsRemaining,
                   candidateText: candidate.creditsText,
                   candidateRemaining: candidate.creditsRemaining),
               self.creditsHintText == candidate.creditsHintText,
-              Self.hasCompatibleCodexResetCreditsLayout(self.codexResetCredits, candidate.codexResetCredits),
+              Self.hasCompatibleLimitResetCreditsLayout(self.limitResetCredits, candidate.limitResetCredits),
+              Self.hasCompatibleProviderCostLayout(self.cloudCredits, candidate.cloudCredits),
               self.placeholder == candidate.placeholder,
               Self.hasCompatibleDashboardLayout(self.inlineUsageDashboard, candidate.inlineUsageDashboard),
               Self.hasCompatibleProviderCostLayout(self.providerCost, candidate.providerCost),
@@ -428,9 +454,9 @@ extension UsageMenuCardView.Model {
         return zip(self.metrics, candidate.metrics).allSatisfy(Self.hasCompatibleMetricLayout)
     }
 
-    private static func hasCompatibleCodexResetCreditsLayout(
-        _ current: CodexResetCreditsPresentation?,
-        _ candidate: CodexResetCreditsPresentation?) -> Bool
+    private static func hasCompatibleLimitResetCreditsLayout(
+        _ current: LimitResetCreditsPresentation?,
+        _ candidate: LimitResetCreditsPresentation?) -> Bool
     {
         // The hosted section has a fixed shape; its count and expiry strings can update in place.
         (current == nil) == (candidate == nil)
@@ -479,12 +505,16 @@ extension UsageMenuCardView.Model {
             current.valueStyle == candidate.valueStyle &&
                 current.kpis.count == candidate.kpis.count &&
                 current.points.count == candidate.points.count &&
+                current.quotaWindows.count == candidate.quotaWindows.count &&
                 current.detailLines.count == candidate.detailLines.count &&
                 zip(current.kpis, candidate.kpis).allSatisfy {
                     $0.title == $1.title && $0.emphasis == $1.emphasis
                 } &&
                 zip(current.points, candidate.points).allSatisfy {
                     $0.id == $1.id && $0.label == $1.label
+                } &&
+                zip(current.quotaWindows, candidate.quotaWindows).allSatisfy {
+                    $0.title == $1.title && $0.range == $1.range && $0.note == $1.note
                 }
         default:
             false
@@ -539,14 +569,13 @@ extension UsageMenuCardView.Model {
         input: Input,
         snapshot: UsageSnapshot) -> (primary: String, secondary: String, tertiary: String, showsTertiary: Bool)
     {
+        let presentation = ProviderDescriptorRegistry.descriptor(for: input.provider).presentation
         if input.provider == .factory, snapshot.tertiary != nil {
             return (L("5-hour"), L("Weekly"), L("Monthly"), true)
         }
         // Legacy request-based Cursor plans track a request quota, not the token-based "Total" pool.
         let primaryLabel = if input.provider == .cursor, snapshot.detailRow(label: "Request quota") != nil {
             "Requests"
-        } else if input.provider == .crof {
-            CrofProviderDescriptor.primaryLabel(snapshot: snapshot)
         } else if input.provider == .grok {
             GrokProviderDescriptor.displayLabel(window: snapshot.primary, now: input.now) ?? input.metadata.sessionLabel
         } else if input.provider == .doubao {
@@ -560,7 +589,7 @@ extension UsageMenuCardView.Model {
         } else if input.provider == .ollama {
             OllamaProviderDescriptor.primaryLabel(window: snapshot.primary) ?? input.metadata.sessionLabel
         } else {
-            input.metadata.sessionLabel
+            presentation.rateWindowLabels(metadata: input.metadata, snapshot: snapshot, now: input.now).primary
         }
         let secondaryLabel = if input.provider == .amp {
             AmpProviderDescriptor.secondaryLabel(snapshot: snapshot) ?? input.metadata.weeklyLabel
@@ -569,7 +598,7 @@ extension UsageMenuCardView.Model {
         } else if input.provider == .sub2api {
             "Weekly"
         } else {
-            input.metadata.weeklyLabel
+            presentation.rateWindowLabels(metadata: input.metadata, snapshot: snapshot, now: input.now).secondary
         }
         let tertiaryLabel = input.provider == .sub2api
             ? L("Monthly")
@@ -691,18 +720,32 @@ extension UsageMenuCardView.Model {
     static func subscriptionMetadataNotes(snapshot: UsageSnapshot?, provider: UsageProvider) -> [String] {
         guard let snapshot else { return [] }
         if let renewsAt = snapshot.subscriptionRenewsAt {
-            return [String(format: L("Renews: %@"), self.subscriptionDateString(renewsAt, provider: provider))]
+            return [String(
+                format: L("Plan renews: %@"),
+                self.subscriptionDateString(
+                    renewsAt,
+                    provider: provider,
+                    dateOnly: snapshot.subscriptionRenewsAtIsDateOnly))]
         }
         if let expiresAt = snapshot.subscriptionExpiresAt {
-            return [String(format: L("Plan expires: %@"), self.subscriptionDateString(expiresAt, provider: provider))]
+            return [String(
+                format: L("Plan expires: %@"),
+                self.subscriptionDateString(
+                    expiresAt,
+                    provider: provider,
+                    dateOnly: snapshot.subscriptionExpiresAtIsDateOnly))]
         }
         return []
     }
 
-    private static func subscriptionDateString(_ date: Date, provider: UsageProvider) -> String {
+    private static func subscriptionDateString(
+        _ date: Date,
+        provider: UsageProvider,
+        dateOnly: Bool = false) -> String
+    {
         let formatter = DateFormatter()
         formatter.locale = Locale.current
-        formatter.timeZone = self.subscriptionDateTimeZone(provider: provider)
+        formatter.timeZone = dateOnly ? TimeZone(secondsFromGMT: 0) : self.subscriptionDateTimeZone(provider: provider)
         formatter.setLocalizedDateFormatFromTemplate("MMM d, yyyy")
         return formatter.string(from: date)
     }
@@ -718,7 +761,7 @@ extension UsageMenuCardView.Model {
 
     static func poeBalanceDetailText(input: Input) -> String? {
         guard input.provider == .poe else { return nil }
-        return StatusItemController.poeBalanceDisplayText(snapshot: input.snapshot)
+        return MenuBarLayoutBalanceResolver.balance(provider: input.provider, snapshot: input.snapshot)
     }
 
     private static func hasLocalCodexTokenUsage(_ input: Input) -> Bool {
@@ -904,7 +947,14 @@ extension UsageMenuCardView.Model {
         input: Input,
         percentStyle: PercentStyle) -> [Metric]
     {
-        guard let extraRateWindows = snapshot.extraRateWindows else { return [] }
+        var extraRateWindows = snapshot.extraRateWindows ?? []
+        if input.provider == .claude, input.showOptionalCreditsAndExtraUsage,
+           MenuBarMetricWindowResolver.claudeSpendLimitWindow(snapshot: snapshot) != nil,
+           let spend = snapshot.claudeMonthlySpendWindow
+        {
+            extraRateWindows.append(spend)
+        }
+        let menuCard = ProviderDescriptorRegistry.descriptor(for: input.provider).presentation.menuCard
         // Codex additional limits (e.g. Codex Spark) are optional extra usage and follow the
         // "optional credits and extra usage" setting. Other providers' extra windows (Antigravity
         // per-model quotas, Factory core windows, etc.) are core data and must always render.
@@ -933,10 +983,18 @@ extension UsageMenuCardView.Model {
             let resolvedResetText = Self.extraRateWindowResetText(
                 namedWindow: namedWindow,
                 input: input)
-            let resetText = input.provider == .sub2api && namedWindow.window.resetsAt == nil
+            let usesResetDetail = menuCard.extraRateWindowShowsResetDescriptionAsDetail(namedWindow)
+            let resetText = usesResetDetail && namedWindow.window.resetsAt == nil
                 ? nil
                 : resolvedResetText
-            let detailText: String? = if input.provider == .sub2api {
+            let detailText: String? = if namedWindow.id == "claude-extra-usage" {
+                Self.providerCostSection(
+                    cost: snapshot.providerCost,
+                    style: .claude,
+                    preferredCurrencyCode: input.preferredCurrencyCode).map {
+                    [$0.spendLine, $0.balanceLine].compactMap(\.self).joined(separator: " · ")
+                }
+            } else if usesResetDetail {
                 namedWindow.window.resetDescription
             } else {
                 nil
@@ -967,7 +1025,7 @@ extension UsageMenuCardView.Model {
             } else {
                 nil
             }
-            return Metric(
+            var metric = Metric(
                 id: namedWindow.id,
                 title: title,
                 percent: Self.clamped(
@@ -989,6 +1047,10 @@ extension UsageMenuCardView.Model {
                         weeklyWindow: namedWindow.window,
                         weeklyWindowID: namedWindow.id)
                     : nil)
+            if namedWindow.id == "claude-extra-usage", snapshot.providerCost?.resetsAt == nil {
+                metric.helpText = L("cost_reset_inferred_tooltip", "Claude")
+            }
+            return metric
         }
     }
 
@@ -1065,10 +1127,14 @@ extension UsageMenuCardView.Model {
         window: RateWindow,
         input: Input) -> PaceDetail?
     {
-        if provider == .claude, window.windowMinutes != 10080 {
+        if let detail = resetWindowPaceDetail(window: window, input: input) { return detail }
+        // Provider-specific by design: extra-window pacing covers Codex, Claude, Antigravity, and Cursor 7-day extras.
+        if provider == .claude || provider == .cursor, window.windowMinutes != 10080 {
             return nil
         }
-        guard provider == .codex || provider == .claude || provider == .antigravity else { return nil }
+        guard provider == .codex || provider == .claude || provider == .antigravity || provider == .cursor else {
+            return nil
+        }
         switch window.windowMinutes {
         case 300:
             return self.sessionPaceDetail(

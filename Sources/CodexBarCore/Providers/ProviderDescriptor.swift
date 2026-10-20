@@ -22,6 +22,11 @@ public enum ProviderTokenCostHintPlacement: Sendable, Equatable {
     case hidden
 }
 
+public enum ProviderTokenHistoryPresentation: Sendable, Equatable {
+    case costAndTokens
+    case tokensOnly
+}
+
 public struct ProviderTokenCostConfig: Sendable {
     public let supportsTokenCost: Bool
     public let noDataMessage: @Sendable () -> String
@@ -38,6 +43,7 @@ public struct ProviderTokenCostConfig: Sendable {
     public let chartEstimateDisclaimer: ProviderTokenCostHint?
     /// Keep calendar slots for missing dates; coverage determines whether their costs are known.
     public let preservesCalendarDaysInCharts: Bool
+    public let presentation: ProviderTokenHistoryPresentation
 
     public init(
         supportsTokenCost: Bool,
@@ -53,7 +59,8 @@ public struct ProviderTokenCostConfig: Sendable {
         showsRequestHistory: Bool = true,
         hintPlacement: ProviderTokenCostHintPlacement = .afterRequestHistory,
         chartEstimateDisclaimer: ProviderTokenCostHint? = nil,
-        preservesCalendarDaysInCharts: Bool = false)
+        preservesCalendarDaysInCharts: Bool = false,
+        presentation: ProviderTokenHistoryPresentation = .costAndTokens)
     {
         self.supportsTokenCost = supportsTokenCost
         self.noDataMessage = noDataMessage
@@ -69,17 +76,23 @@ public struct ProviderTokenCostConfig: Sendable {
         self.hintPlacement = hintPlacement
         self.chartEstimateDisclaimer = chartEstimateDisclaimer
         self.preservesCalendarDaysInCharts = preservesCalendarDaysInCharts
+        self.presentation = presentation
     }
 }
 
 public struct ProviderHistoryCapability: Sendable, Equatable {
     public static let optIn = ProviderHistoryCapability(alwaysTracksPlanUtilization: false)
     public static let alwaysTracked = ProviderHistoryCapability(alwaysTracksPlanUtilization: true)
+    public static let unavailable = ProviderHistoryCapability(
+        alwaysTracksPlanUtilization: false,
+        supportsPlanUtilization: false)
 
     public let alwaysTracksPlanUtilization: Bool
+    public let supportsPlanUtilization: Bool
 
-    public init(alwaysTracksPlanUtilization: Bool) {
+    public init(alwaysTracksPlanUtilization: Bool, supportsPlanUtilization: Bool = true) {
         self.alwaysTracksPlanUtilization = alwaysTracksPlanUtilization
+        self.supportsPlanUtilization = supportsPlanUtilization
     }
 }
 
@@ -113,13 +126,25 @@ public struct ProviderMenuBarMetricCapabilities: Sendable, Equatable {
 
     public let supported: Set<ProviderMenuBarMetric>
     public let tertiaryRequiresWindow: Bool
+    public let namedExtras: [String: String]
+    /// Compact menu bar tags (e.g. `TP`) for lane percentages. Full lane titles stay in menus, editor
+    /// chips, and accessibility; lanes without a tag render bare.
+    public let laneShortLabels: [ProviderUsageLane: String]
+    /// Compact menu bar tags keyed like `namedExtras`; extras without a tag render their full title.
+    public let namedExtraShortLabels: [String: String]
 
     public init(
         supported: Set<ProviderMenuBarMetric>,
-        tertiaryRequiresWindow: Bool = false)
+        tertiaryRequiresWindow: Bool = false,
+        namedExtras: [String: String] = [:],
+        laneShortLabels: [ProviderUsageLane: String] = [:],
+        namedExtraShortLabels: [String: String] = [:])
     {
         self.supported = supported
         self.tertiaryRequiresWindow = tertiaryRequiresWindow
+        self.namedExtras = namedExtras
+        self.laneShortLabels = laneShortLabels
+        self.namedExtraShortLabels = namedExtraShortLabels
     }
 
     public func supports(_ metric: ProviderMenuBarMetric) -> Bool {
@@ -302,7 +327,7 @@ public struct ProviderPaceCapability: Sendable {
         guard let startsAt = calendar.date(byAdding: .month, value: -1, to: resetsAt) else { return nil }
         let minutes = resetsAt.timeIntervalSince(startsAt) / 60
         guard minutes.isFinite, minutes > 0 else { return nil }
-        return Int(minutes.rounded())
+        return Int(exactly: minutes.rounded())
     }
 }
 
@@ -316,10 +341,12 @@ public struct ProviderDescriptor: Sendable {
     public let presentation: ProviderUsagePresentation
     public let settingsSection: ProviderSettingsSectionRegistration
     public let credentials: ProviderCredentialAdapter?
+    public let pluginResultPolicy: ProviderPluginResultPolicy
     public let config: ProviderConfigCapabilities
     public let menuBarMetrics: ProviderMenuBarMetricCapabilities
     public let fetchPlan: ProviderFetchPlan
     public let cli: ProviderCLIConfig
+    public let nativeAppBundleIdentifiers: Set<String>
     private let configNormalizer: @Sendable (inout ProviderConfig) -> Void
 
     public init(
@@ -327,6 +354,7 @@ public struct ProviderDescriptor: Sendable {
         menuBarMetrics: ProviderMenuBarMetricCapabilities? = nil,
         settingsSection: ProviderSettingsSectionRegistration? = nil,
         credentials: ProviderCredentialAdapter? = nil,
+        pluginResultPolicy: ProviderPluginResultPolicy = ProviderPluginResultPolicy(),
         config: ProviderConfigCapabilities = ProviderConfigCapabilities(),
         metadata: ProviderMetadata,
         branding: ProviderBranding,
@@ -336,6 +364,7 @@ public struct ProviderDescriptor: Sendable {
         presentation: ProviderUsagePresentation = ProviderUsagePresentation(),
         fetchPlan: ProviderFetchPlan,
         cli: ProviderCLIConfig,
+        nativeAppBundleIdentifiers: Set<String> = [],
         configNormalizer: @escaping @Sendable (inout ProviderConfig) -> Void = { _ in })
     {
         self.id = id
@@ -347,10 +376,12 @@ public struct ProviderDescriptor: Sendable {
         self.history = history
         self.presentation = presentation
         self.credentials = credentials
+        self.pluginResultPolicy = pluginResultPolicy
         self.config = config
         self.menuBarMetrics = menuBarMetrics ?? (metadata.balanceOnly ? .automaticOnly : .standard)
         self.fetchPlan = fetchPlan
         self.cli = cli
+        self.nativeAppBundleIdentifiers = nativeAppBundleIdentifiers
         self.configNormalizer = configNormalizer
     }
 
@@ -369,39 +400,51 @@ public struct ProviderDescriptor: Sendable {
 }
 
 public enum ProviderDescriptorRegistry {
-    private final class Store: @unchecked Sendable {
-        var ordered: [ProviderDescriptor] = []
-        var byID: [UsageProvider: ProviderDescriptor] = [:]
-    }
+    final class Store: @unchecked Sendable {
+        private let lock = NSLock()
+        private var ordered: [ProviderDescriptor] = []
+        private var indexByID: [UsageProvider: Int] = [:]
 
-    private static let lock = NSLock()
-    private static let store = Store()
-    private static let bootstrap: Void = {
-        for descriptor in ProviderManifest.allDescriptors {
-            _ = ProviderDescriptorRegistry.register(descriptor)
+        @discardableResult
+        func register(_ descriptor: ProviderDescriptor) -> ProviderDescriptor {
+            self.lock.withLock {
+                if let index = self.indexByID[descriptor.id] {
+                    self.ordered[index] = descriptor
+                } else {
+                    self.indexByID[descriptor.id] = self.ordered.count
+                    self.ordered.append(descriptor)
+                }
+                return descriptor
+            }
         }
-    }()
 
-    private static func ensureBootstrapped() {
-        _ = self.bootstrap
+        var all: [ProviderDescriptor] {
+            self.lock.withLock { self.ordered }
+        }
+
+        func descriptor(for id: UsageProvider) -> ProviderDescriptor? {
+            self.lock.withLock {
+                guard let index = self.indexByID[id] else { return nil }
+                return self.ordered[index]
+            }
+        }
     }
+
+    private static let store: Store = {
+        let store = Store()
+        for descriptor in ProviderManifest.allDescriptors {
+            store.register(descriptor)
+        }
+        return store
+    }()
 
     @discardableResult
     public static func register(_ descriptor: ProviderDescriptor) -> ProviderDescriptor {
-        self.lock.lock()
-        defer { self.lock.unlock() }
-        if self.store.byID[descriptor.id] == nil {
-            self.store.ordered.append(descriptor)
-        }
-        self.store.byID[descriptor.id] = descriptor
-        return descriptor
+        self.store.register(descriptor)
     }
 
     public static var all: [ProviderDescriptor] {
-        self.ensureBootstrapped()
-        self.lock.lock()
-        defer { self.lock.unlock() }
-        return self.store.ordered
+        self.store.all
     }
 
     public static var metadata: [UsageProvider: ProviderMetadata] {
@@ -409,18 +452,13 @@ public enum ProviderDescriptorRegistry {
     }
 
     public static func descriptor(for id: UsageProvider) -> ProviderDescriptor {
-        self.ensureBootstrapped()
-        if let found = self.store.byID[id] {
-            return found
-        }
-        if let found = self.all.first(where: { $0.id == id }) {
+        if let found = self.store.descriptor(for: id) {
             return found
         }
         fatalError("Missing ProviderDescriptor for \(id.rawValue)")
     }
 
     public static var cliNameMap: [String: UsageProvider] {
-        self.ensureBootstrapped()
         var map: [String: UsageProvider] = [:]
         for descriptor in self.all {
             map[descriptor.cli.name] = descriptor.id

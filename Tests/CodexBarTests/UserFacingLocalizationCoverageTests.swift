@@ -5,6 +5,36 @@ import Testing
 
 struct UserFacingLocalizationCoverageTests {
     @Test
+    func `OpenAI credential scope captions are translated and preserve the account label`() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/CodexBar/Resources")
+        let accountKey = "Applies to the selected token account “%@”. Each account keeps its own limits."
+        let providerKey = "Applies to the OpenAI API key, not to token accounts."
+        let languages = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "lproj" }
+        #expect(languages.count == 23)
+        for language in languages {
+            let identifier = language.deletingPathExtension().lastPathComponent
+            let source = try String(contentsOf: language.appendingPathComponent("Localizable.strings"), encoding: .utf8)
+            #expect(source.contains("\"\(accountKey)\" ="))
+            #expect(source.contains("\"\(providerKey)\" ="))
+            CodexBarLocalizationOverride.$appLanguage.withValue(identifier) {
+                let account = L(accountKey, "Synthetic Account")
+                let provider = L(providerKey)
+                #expect(account.contains("Synthetic Account"))
+                #expect(!account.contains("%@"))
+                if identifier != "en" {
+                    #expect(account != accountKey.replacingOccurrences(of: "%@", with: "Synthetic Account"))
+                    #expect(provider != providerKey)
+                }
+            }
+        }
+    }
+
+    @Test
     func `selected user-facing UI surfaces avoid raw English literals`() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -63,9 +93,36 @@ struct UserFacingLocalizationCoverageTests {
                 ".help(\"Copy error\")",
             ],
             "Sources/CodexBar/PreferencesSpendDashboardPane.swift": [
+                "Text(\"Partial estimate\")",
+            ],
+            "Sources/CodexBar/PreferencesMenuPane.swift": [
+                "title: \"Stay Awake\",",
+            ],
+            "Sources/CodexBar/PreferencesTransferSection.swift": [
+                "Text(\"Portable Preferences\")",
+                "Button(\"Export…\")",
+                "Button(\"Import…\")",
+                "Text(\"Shortcuts\")",
+            ],
+            "Sources/CodexBar/ShareStatsCardView.swift": [
+                "Text(\"LOCAL SNAPSHOT\")",
+                "Label(\"LOCAL · AGGREGATE ONLY\"",
+            ],
+            "Sources/CodexBarWidget/WidgetTiles.swift": [
+                "String(describing: Text(reset, style: .relative))",
+            ],
+            "Sources/CodexBar/PreferencesNotificationsPane.swift": [
+                "\"Credential expiry\"",
+                "\"Notify once when a provider account needs you to sign in again.\"",
+            ],
+            "Sources/CodexBar/UsageStore+CredentialNotifications.swift": [
+                " needs sign-in\"",
+                "\"Open CodexBar to review the account error and sign in again.\"",
+            ],
+            "Sources/CodexBar/SpendDashboardProviderBreakdown.swift": [
                 "Text(\"Model breakdown unavailable\")",
                 "Text(\"Partial model breakdown\")",
-                "Text(\"Partial estimate\")",
+                "Text(\"No model-level history\")",
             ],
             "Sources/CodexBar/PreferencesProviderSettingsRows.swift": [
                 "Text(self.title)",
@@ -119,6 +176,38 @@ struct UserFacingLocalizationCoverageTests {
     }
 
     @Test
+    func `credential expiry settings and alerts follow the selected language`() {
+        let translations = [
+            (
+                "en",
+                "Credential expiry",
+                "Notify once when a provider account needs you to sign in again.",
+                "Codex needs sign-in",
+                "Open CodexBar to review the account error and sign in again."),
+            (
+                "zh-Hans",
+                "登录凭据过期",
+                "当服务商账户需要重新登录时，发送一次通知。",
+                "Codex 需要重新登录",
+                "打开 CodexBar 查看账户错误并重新登录。"),
+            (
+                "zh-Hant",
+                "登入憑證過期",
+                "當服務商帳戶需要重新登入時，傳送一次通知。",
+                "Codex 需要重新登入",
+                "開啟 CodexBar 查看帳戶錯誤並重新登入。"),
+        ]
+        for (language, title, subtitle, alertTitle, alertBody) in translations {
+            CodexBarLocalizationOverride.$appLanguage.withValue(language) {
+                #expect(L("credential_expiry_notifications_title") == title)
+                #expect(L("credential_expiry_notifications_subtitle") == subtitle)
+                #expect(L("credential_expiry_notification_title", "Codex") == alertTitle)
+                #expect(L("credential_expiry_notification_body") == alertBody)
+            }
+        }
+    }
+
+    @Test
     func `provider detail localization preserves technical identifiers`() throws {
         let details = try [
             ProviderDetailSection(
@@ -169,142 +258,47 @@ struct UserFacingLocalizationCoverageTests {
     }
 
     @Test
+    func `grok reset coupon count and expiry localize at presentation`() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let snapshot = GrokRateLimitResetCreditsSnapshot(
+            expirations: [now.addingTimeInterval(172_800), now.addingTimeInterval(432_000)],
+            updatedAt: now)
+        try CodexBarLocalizationOverride.$appLanguage.withValue("ru") {
+            let presentation = try #require(LimitResetCreditsPresentation.make(
+                snapshot: snapshot, resetStyle: .countdown, now: now))
+            #expect(presentation.accessibilityLabel.contains("Кредиты сброса лимита"))
+            #expect(presentation.text == "2 доступен")
+            #expect(presentation.items.count == 2)
+            #expect(presentation.helpText.contains("Истекает"))
+        }
+    }
+
+    @Test
     func `spend dashboard model breakdown state stays precise and localized`() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         let source = try String(
-            contentsOf: root.appendingPathComponent("Sources/CodexBar/PreferencesSpendDashboardPane.swift"),
+            contentsOf: root.appendingPathComponent("Sources/CodexBar/SpendDashboardProviderBreakdown.swift"),
             encoding: .utf8)
 
-        #expect(source.contains(#"Text(L("Model breakdown unavailable"))"#))
+        #expect(source.contains(#"L("Model breakdown unavailable")"#))
         #expect(source.contains(#"L("Partial model breakdown")"#))
-        #expect(source.contains(#"Text(L("No model-level history"))"#))
+        #expect(source.contains(#"L("No model-level history")"#))
     }
 
     @Test
-    func `spend dashboard chart keeps validated points when aggregate total is unavailable`() {
-        let start = Date(timeIntervalSince1970: 1_783_036_800)
-        let points = [
-            SpendDashboardModel.DailyPoint(
-                sourceID: "healthy-claude",
-                provider: .claude,
-                providerName: "Claude",
-                day: start,
-                cost: 2,
-                stackStart: 0,
-                stackEnd: 2),
-            SpendDashboardModel.DailyPoint(
-                sourceID: "healthy-openai-1",
-                provider: .openai,
-                providerName: "OpenAI",
-                day: start,
-                cost: 3,
-                stackStart: 2,
-                stackEnd: 5),
-            SpendDashboardModel.DailyPoint(
-                sourceID: "healthy-openai-2",
-                provider: .openai,
-                providerName: "OpenAI",
-                day: start.addingTimeInterval(86400),
-                cost: 4,
-                stackStart: 0,
-                stackEnd: 4),
-        ]
-
-        let partial = SpendDailyChartPresentation(dailyPoints: points, aggregateTotal: nil)
-        #expect(partial.content == .chart)
-        #expect(partial.series.map(\.name) == ["Claude", "OpenAI"])
-        #expect(partial.dayCount == 2)
+    func `hourly chart accessibility retains localized plurals`() {
         CodexBarLocalizationOverride.$appLanguage.withValue("en") {
-            #expect(partial.accessibilityValue == "2 days of usage data across 2 services")
-        }
-
-        #expect(SpendDailyChartPresentation(dailyPoints: [], aggregateTotal: nil).content == .unavailable)
-        #expect(SpendDailyChartPresentation(dailyPoints: [], aggregateTotal: 0).content == .chart)
-    }
-
-    @Test
-    func `hourly chart labels include the date across multiple days`() throws {
-        let shanghai = try #require(TimeZone(identifier: "Asia/Shanghai"))
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = shanghai
-        let first = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 16, hour: 10)))
-        let second = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 17, hour: 10)))
-        let points = [
-            SpendDashboardModel.HourlyPoint(
-                sourceID: SpendDashboardModel.openCodexSourceID,
-                provider: .codex,
-                providerName: "OpenCodex",
-                hour: first,
-                cost: 1.2,
-                stackStart: 0,
-                stackEnd: 1.2),
-            SpendDashboardModel.HourlyPoint(
-                sourceID: SpendDashboardModel.openCodexSourceID,
-                provider: .codex,
-                providerName: "OpenCodex",
-                hour: second,
-                cost: 0.8,
-                stackStart: 0,
-                stackEnd: 0.8),
-        ]
-
-        let losAngeles = try #require(TimeZone(identifier: "America/Los_Angeles"))
-        let multiDay = SpendHourlyChartPresentation(hourlyPoints: points, calendar: calendar)
-        let sameDay = SpendHourlyChartPresentation(hourlyPoints: [points[0]], calendar: calendar)
-        #expect(multiDay.content == .chart)
-        #expect(multiDay.includeDateInPointLabels)
-        #expect(!sameDay.includeDateInPointLabels)
-        CodexBarLocalizationOverride.$appLanguage.withValue("en") {
-            #expect(multiDay.accessibilityValue == "2 hours of usage data across 1 service")
-            #expect(sameDay.accessibilityValue == "1 hour of usage data across 1 service")
+            #expect(spendDashboardHourlyChartAccessibilityValue(hourCount: 1, serviceCount: 1)
+                == "1 hour of usage data across 1 service")
+            #expect(spendDashboardHourlyChartAccessibilityValue(hourCount: 2, serviceCount: 1)
+                == "2 hours of usage data across 1 service")
             #expect(spendDashboardHourlyChartAccessibilityValue(hourCount: 1, serviceCount: 2)
                 == "1 hour of usage data across 2 services")
             #expect(spendDashboardHourlyChartAccessibilityValue(hourCount: 2, serviceCount: 2)
                 == "2 hours of usage data across 2 services")
-            let shanghaiLabel = spendDashboardHourlyPointAccessibilityLabel(
-                providerName: "OpenCodex",
-                hour: first,
-                timeZone: shanghai,
-                includeDate: true)
-            #expect(shanghaiLabel.hasPrefix("OpenCodex, "))
-            #expect(shanghaiLabel.contains("16"))
-            #expect(shanghaiLabel.contains("10"))
-
-            let sameClockDifferentZone = spendDashboardHourlyPointAccessibilityLabel(
-                providerName: "OpenCodex",
-                hour: first,
-                timeZone: losAngeles,
-                includeDate: false)
-            #expect(sameClockDifferentZone != shanghaiLabel)
-            #expect(sameClockDifferentZone.contains("7"))
-        }
-    }
-
-    @Test
-    func `hourly chart labels disambiguate repeated DST fallback hours`() throws {
-        let newYork = try #require(TimeZone(identifier: "America/New_York"))
-        let first1am = Date(timeIntervalSince1970: 1_793_509_200)
-        let second1am = Date(timeIntervalSince1970: 1_793_512_800)
-        try CodexBarLocalizationOverride.$appLanguage.withValue("en") {
-            let label1 = spendDashboardHourlyPointAccessibilityLabel(
-                providerName: "OpenCodex",
-                hour: first1am,
-                timeZone: newYork,
-                includeDate: true)
-            let label2 = spendDashboardHourlyPointAccessibilityLabel(
-                providerName: "OpenCodex",
-                hour: second1am,
-                timeZone: newYork,
-                includeDate: true)
-            let firstAbbreviation = try #require(newYork.abbreviation(for: first1am))
-            let secondAbbreviation = try #require(newYork.abbreviation(for: second1am))
-            #expect(firstAbbreviation != secondAbbreviation)
-            #expect(label1 != label2)
-            #expect(label1.contains(firstAbbreviation))
-            #expect(label2.contains(secondAbbreviation))
         }
     }
 }

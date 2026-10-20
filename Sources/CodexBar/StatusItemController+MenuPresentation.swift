@@ -4,7 +4,12 @@ import Observation
 import SwiftUI
 
 extension StatusItemController {
-    func switcherWeeklyRemaining(for provider: UsageProvider) -> Double? {
+    func switcherWeeklyRemaining(for instanceID: ProviderInstanceID) -> Double? {
+        guard let provider = instanceID.firstPartyProvider else {
+            return Self.pluginSwitcherMetricPercent(
+                snapshot: self.store.snapshot(for: instanceID),
+                showUsed: self.settings.usageBarsShowUsed)
+        }
         // The switcher mini-bars mirror the menu-bar indicator, so route through the
         // same presentation snapshot (claude-swap active-account override, issue #2731).
         let snapshot = self.store.menuBarSnapshot(for: provider.instanceID)
@@ -162,21 +167,14 @@ struct MenuCardRowPayload {
     let onClick: (() -> Void)?
 }
 
-/// Inner SwiftUI host used by every card row. The outer container owns AppKit event handling and,
-/// for Overview rows, the composited selection layer.
-private final class MenuRowContentHostingView: NSHostingView<MenuCardSectionContainerView<AnyView>> {
-    override var allowsVibrancy: Bool {
-        true
-    }
-}
-
 /// One stable AppKit class for every menu-card row. Keeping the outer view attached while payloads
 /// move between Overview and provider rows prevents Tahoe from painting NSMenuItem's fallback title.
 @MainActor
 final class MenuRowContainerView: NSView, MenuCardHighlighting, MenuCardMeasuring {
     let highlightState: MenuCardHighlightState
     let interactiveRegionStore: MenuCardInteractiveRegionStore
-    private let hosting: MenuRowContentHostingView
+    // Forced vibrancy makes white GPU-tinted content disappear on macOS 15.
+    private let hosting: NSHostingView<MenuCardSectionContainerView<AnyView>>
     private var measuredSize: NSSize?
     private var selectionView: NSVisualEffectView?
     private var tintFilter: CIFilter?
@@ -196,10 +194,6 @@ final class MenuRowContainerView: NSView, MenuCardHighlighting, MenuCardMeasurin
     private static let selectionVerticalInset: CGFloat = 2
     private static let selectionCornerRadius: CGFloat = 6
     private static let selectionFadeDuration: CFTimeInterval = 0.06
-
-    override var allowsVibrancy: Bool {
-        true
-    }
 
     override var intrinsicContentSize: NSSize {
         let width = self.frame.width > 0 ? self.frame.width : NSView.noIntrinsicMetric
@@ -239,7 +233,7 @@ final class MenuRowContainerView: NSView, MenuCardHighlighting, MenuCardMeasurin
         self.allowsMenuHighlight = payload.allowsMenuHighlight
         self.containsInteractiveControls = payload.containsInteractiveControls
         self.onClick = payload.onClick
-        self.hosting = MenuRowContentHostingView(rootView: Self.makeRootView(
+        self.hosting = NSHostingView(rootView: Self.makeRootView(
             payload: payload,
             highlightState: highlightState,
             refreshMonitor: refreshMonitor,
@@ -895,13 +889,14 @@ struct MenuCardSectionContainerView<Content: View>: View {
             }
             .overlay(alignment: self.submenuIndicatorAlignment) {
                 if self.showsSubmenuIndicator {
-                    Image(systemName: "chevron.right")
+                    Image(systemName: "chevron.forward")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(MenuHighlightStyle.secondary(self.highlightState.isHighlighted))
                         .padding(.top, self.submenuIndicatorTopPadding)
                         .padding(.trailing, 10)
                 }
             }
+            .codexBarLocalized()
     }
 }
 

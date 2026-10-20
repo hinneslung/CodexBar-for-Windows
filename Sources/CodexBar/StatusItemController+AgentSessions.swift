@@ -56,7 +56,7 @@ extension StatusItemController {
             } else {
                 self.store.clearCodingActivityObservation()
             }
-            if self.settings.agentSessionsEnabled {
+            if self.settings.agentSessionsEnabled || self.settings.stayAwakeEnabled {
                 // Match the store-observation path (`handleObservedStoreMenuChange`): mark menus
                 // stale but never rebuild a tracked parent in place. Rebuilding the Overview
                 // parent mid-hover replaces the hovered row and force-closes its hosted chart
@@ -71,14 +71,19 @@ extension StatusItemController {
 
     func synchronizeAgentSessionsForSettingsChange() {
         let remoteConfigurationChanged =
-            self.settings.agentSessionsEnabled != self.lastAgentSessionsEnabled ||
+            self.settings.agentSessionsEnabled != self.lastAgentSessionsVisibility.local ||
+            self.settings.agentSessionsRemoteEnabled != self.lastAgentSessionsVisibility.remote ||
             self.settings.agentSessionsManualHosts != self.lastAgentSessionsManualHosts
         let monitoringChanged =
+            self.settings.stayAwakeEnabled != self.lastStayAwakeEnabled ||
             self.settings.refreshFrequency != self.lastAgentSessionsRefreshFrequency ||
             self.settings.adaptiveActivityScanningEnabled != self.lastAdaptiveActivityScanningEnabled
         guard remoteConfigurationChanged || monitoringChanged else { return }
 
-        self.lastAgentSessionsEnabled = self.settings.agentSessionsEnabled
+        self.lastStayAwakeEnabled = self.settings.stayAwakeEnabled
+        self.lastAgentSessionsVisibility = (
+            self.settings.agentSessionsEnabled,
+            self.settings.agentSessionsRemoteEnabled)
         self.lastAgentSessionsManualHosts = self.settings.agentSessionsManualHosts
         self.lastAgentSessionsRefreshFrequency = self.settings.refreshFrequency
         self.lastAdaptiveActivityScanningEnabled = self.settings.adaptiveActivityScanningEnabled

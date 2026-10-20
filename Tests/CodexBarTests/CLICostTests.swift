@@ -28,6 +28,44 @@ struct CLICostTests {
     }
 
     @Test
+    func `Claude breakdown is explicit opt in`() throws {
+        let parser = CommandParser(signature: CodexBarCLI._costSignatureForTesting())
+
+        let defaultValues = try parser.parse(arguments: [])
+        #expect(!defaultValues.flags.contains("breakdown"))
+
+        let breakdownValues = try parser.parse(arguments: ["--breakdown"])
+        #expect(breakdownValues.flags.contains("breakdown"))
+    }
+
+    @Test
+    func `OpenCode Go text breakdown preserves unknown costs and model tokens`() {
+        let snapshot = CostUsageTokenSnapshot(
+            sessionTokens: 125,
+            sessionCostUSD: nil,
+            last30DaysTokens: 125,
+            last30DaysCostUSD: nil,
+            historyDays: 1,
+            daily: [.init(
+                date: "1970-01-01",
+                inputTokens: 100,
+                outputTokens: 25,
+                totalTokens: 125,
+                costUSD: nil,
+                modelsUsed: ["fixture-model"],
+                modelBreakdowns: [.init(modelName: "fixture-model", costUSD: nil, totalTokens: 125)])],
+            updatedAt: Date(timeIntervalSince1970: 0))
+        let output = CodexBarCLI.renderCostText(
+            provider: .opencodego, snapshot: snapshot, useColor: false, includeBreakdown: true)
+        #expect(output.hasPrefix("OpenCode Go Cost (API-rate estimate)\n"))
+        #expect(output.contains("Estimated from local logs · may differ from your bill"))
+        #expect(output.contains("Daily breakdown"))
+        #expect(output.contains("fixture-model"))
+        #expect(output.contains("125 tokens"))
+        #expect(!output.contains("$0.00"))
+    }
+
+    @Test
     func `parses session group by and keeps project parsing`() throws {
         let parser = CommandParser(signature: CodexBarCLI._costSignatureForTesting())
 
@@ -73,10 +111,34 @@ struct CLICostTests {
             groupBy: .project,
             format: .text,
             includePiSessions: true))
+        #expect(!CodexBarCLI.costIncludePiSessions(
+            provider: .codex,
+            selectedProviders: [.codex, .pi],
+            groupBy: .none,
+            format: .text,
+            includePiSessions: true))
+        #expect(!CodexBarCLI.costIncludePiSessions(
+            provider: .codex,
+            selectedProviders: [.codex, .pi],
+            groupBy: .none,
+            format: .json,
+            includePiSessions: true))
         #expect(CodexBarCLI.costIncludePiSessions(
             provider: .claude,
             groupBy: .session,
             format: .text,
+            includePiSessions: true))
+        #expect(!CodexBarCLI.costIncludePiSessions(
+            provider: .claude,
+            selectedProviders: [.claude, .pi],
+            groupBy: .none,
+            format: .json,
+            includePiSessions: true))
+        #expect(CodexBarCLI.costIncludePiSessions(
+            provider: .claude,
+            selectedProviders: [.claude],
+            groupBy: .none,
+            format: .json,
             includePiSessions: true))
     }
 
@@ -404,12 +466,20 @@ struct CLICostTests {
         #expect(!json.contains("\"sessions\""))
     }
 
-    @Test
-    func `renders cost text snapshot`() {
+    @Test(arguments: [
+        (1200, 9000, "1.2K", "9K"),
+        (999_999, 999_999_999, "1M", "1B"),
+    ])
+    func `renders cost text snapshot`(
+        sessionTokens: Int,
+        historyTokens: Int,
+        sessionText: String,
+        historyText: String)
+    {
         let snap = CostUsageTokenSnapshot(
-            sessionTokens: 1200,
+            sessionTokens: sessionTokens,
             sessionCostUSD: 1.25,
-            last30DaysTokens: 9000,
+            last30DaysTokens: historyTokens,
             last30DaysCostUSD: 9.99,
             historyDays: 90,
             daily: [],
@@ -420,8 +490,8 @@ struct CLICostTests {
             .replacingOccurrences(of: "$ ", with: "$")
 
         #expect(output.contains("Claude Cost (API-rate estimate)"))
-        #expect(output.contains("Today: $1.25 · 1.2K tokens"))
-        #expect(output.contains("Last 90 days: $9.99 · 9K tokens"))
+        #expect(output.contains("Today: $1.25 · \(sessionText) tokens"))
+        #expect(output.contains("Last 90 days: $9.99 · \(historyText) tokens"))
         #expect(output.contains("cache read/write tokens"))
         #expect(output.contains("Claude Code /status"))
     }
