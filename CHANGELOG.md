@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.56.8-windows.6 — 2026-10-20
+
+- Load Claude usage from its OAuth sign-in first in Automatic mode, falling back to the interactive Claude CLI only when OAuth is unavailable. Claude now loads in seconds instead of 24–49s and no longer reports "Automatic took too long to respond".
+- Stop a cancelled refresh from starting further provider CLI processes.
+
 ## 0.56.8-windows.5 — 2026-09-21
 
 - Show each Codex account's available usage resets and nearest expiry in the Windows overview, such as `1 reset (5d)`.
