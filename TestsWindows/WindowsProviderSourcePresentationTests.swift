@@ -259,7 +259,7 @@ struct WindowsProviderSourcePresentationTests {
                 "JetBrains/JetBrainsProviderDescriptor.swift", "let kind: ProviderFetchKind = .localProbe"),
             (
                 "Kimi/KimiProviderDescriptor.swift",
-                "KimiSettingsReader.hasKimiCodeCredential(environment:"),
+                "KimiSettingsReader.hasKimiCodeCredential("),
             (
                 "VertexAI/VertexAIProviderDescriptor.swift",
                 "VertexAIOAuthCredentialsStore.hasCredentials(environment:"),
