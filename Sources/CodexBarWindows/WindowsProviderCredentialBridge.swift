@@ -14,7 +14,7 @@ struct WindowsProviderCredentialBridge: Sendable {
         let authProviderID: String
         let credentialKind: CredentialKind
         let secretEnvironmentKey: String
-        let additionalEnvironment: [String: String]
+        @ProcessEnvironment var additionalEnvironment: [String: String]
 
         init(
             _ authProviderID: String,

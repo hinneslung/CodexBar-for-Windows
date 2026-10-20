@@ -86,7 +86,7 @@ struct WindowsProviderCredentialRouteResolver: Sendable {
 struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable {
     static let maximumConcurrentProviderFetches = 5
     private let store: WindowsConfigurationStore?
-    private let environment: [String: String]
+    @ProcessEnvironment private var environment: [String: String]
     private let wslDistributions: [String]
     private let cliClient: WindowsCanonicalCLIProviderClient
     private let cliDiscoveryCache: WindowsCanonicalCLIDiscoveryCache
@@ -232,7 +232,7 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
             }
         }
 
-        let environmentOverrides: [String: String]
+        @ProcessEnvironment var environmentOverrides: [String: String] = [:]
         do {
             var bridgeEnvironment = self.environment
             if let authURL = WindowsWSLDefaultUserHome.openCodeAuthURL(
