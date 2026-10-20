@@ -390,10 +390,36 @@ struct WindowsConfiguredProviderDataSourceTests {
     }
 
     @Test
-    func `only Claude prefers a faster automatic source`() {
-        #expect(WindowsConfiguredProviderDataSource.automaticPreferredSource(for: .claude) == "oauth")
-        #expect(WindowsConfiguredProviderDataSource.automaticPreferredSource(for: .codex) == nil)
-        #expect(WindowsConfiguredProviderDataSource.automaticPreferredSource(for: .openCodeGo) == nil)
+    func `automatic source routes are declared only for Claude and Gemini`() {
+        let routes = WindowsProviderConfigurationCatalog.automaticSourceRoutes
+        #expect(routes == [.claude: .preferred("oauth"), .gemini: .exclusive("api")])
+        #expect(routes[.codex] == nil)
+    }
+
+    @Test
+    func `Gemini automatic always uses its API source with normal timeout`() async throws {
+        let (snapshot, calls) = try await Self.fetchAutomatic(
+            provider: .gemini,
+            responses: [.init(output: Self.usagePayload(provider: "gemini", source: "api"), exitCode: 0)])
+
+        #expect(snapshot.availability == .available)
+        #expect(
+            calls.map(\.arguments) == [[
+                "-d", "Ubuntu", "--", "/usr/local/bin/codexbar",
+                "usage", "--provider", "gemini", "--source", "api", "--json-only",
+            ]])
+        #expect(calls.first?.timeout == 45)
+    }
+
+    @Test
+    func `Gemini automatic retries its API source and never falls back to plain Automatic`() async throws {
+        let (snapshot, calls) = try await Self.fetchAutomatic(
+            provider: .gemini,
+            responses: [.init(output: Data(), exitCode: 1), .init(output: Data(), exitCode: 1)])
+
+        #expect(snapshot.availability == .unavailable)
+        #expect(calls.count == 2)
+        #expect(calls.allSatisfy { $0.arguments.contains("--source") && $0.arguments.contains("api") })
     }
 
     @Test
@@ -561,6 +587,20 @@ struct WindowsConfiguredProviderDataSourceTests {
         onCall: (@Sendable (_ callIndex: Int, _ vault: WindowsProviderCredentialVault?) -> Void)? = nil)
         async throws -> (WindowsProviderSnapshot, [SequencedInvocationCapture.Call])
     {
+        try await self.fetchAutomatic(
+            provider: .claude,
+            responses: responses,
+            usesCredentialVault: usesCredentialVault,
+            onCall: onCall)
+    }
+
+    private static func fetchAutomatic(
+        provider: WindowsProviderID,
+        responses: [SequencedInvocationCapture.Response],
+        usesCredentialVault: Bool = false,
+        onCall: (@Sendable (_ callIndex: Int, _ vault: WindowsProviderCredentialVault?) -> Void)? = nil)
+        async throws -> (WindowsProviderSnapshot, [SequencedInvocationCapture.Call])
+    {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "codexbar-claude-preferred-\(Foundation.UUID().uuidString)",
             isDirectory: true)
@@ -568,7 +608,7 @@ struct WindowsConfiguredProviderDataSourceTests {
         let store = WindowsConfigurationStore(fileURL: root.appendingPathComponent("config.json"))
         try store.save(
             WindowsAppConfiguration(providers: [
-                WindowsProviderConfiguration(id: .claude, enabled: true, order: 0),
+                WindowsProviderConfiguration(id: provider, enabled: true, order: 0),
             ]))
         let vault = usesCredentialVault
             ? WindowsProviderCredentialVault(directoryURL: root.appendingPathComponent("Credentials"))
@@ -600,10 +640,14 @@ struct WindowsConfiguredProviderDataSourceTests {
         #"[{"provider":"claude","source":"oauth","error":{"kind":"provider","message":"No credentials"}}]"#.utf8)
 
     private static func claudeUsagePayload(source: String) -> Data {
+        self.usagePayload(provider: "claude", source: source)
+    }
+
+    private static func usagePayload(provider: String, source: String) -> Data {
         Data(
             #"""
             [{
-              "provider":"claude",
+              "provider":"\#(provider)",
               "source":"\#(source)",
               "usage":{"primary":{"usedPercent":2,"resetsAt":"2026-10-20T07:30:00Z"}}
             }]

@@ -188,6 +188,23 @@ struct WindowsUnavailableProviderInfo: Sendable, Equatable {
     }
 }
 
+/// How Automatic chooses an explicit upstream source for a provider whose plain Automatic route is slow or
+/// unusable in the Linux CLI.
+struct WindowsAutomaticSourceRoute: Sendable, Equatable {
+    let source: String
+    /// `true`: a bounded, non-retried first attempt, then the ordinary Automatic route once.
+    /// `false`: the provider's only route, run with normal timeout and retry.
+    let fallsBackToAutomatic: Bool
+
+    static func preferred(_ source: String) -> Self {
+        Self(source: source, fallsBackToAutomatic: true)
+    }
+
+    static func exclusive(_ source: String) -> Self {
+        Self(source: source, fallsBackToAutomatic: false)
+    }
+}
+
 /// Declarative Windows-owned manual credential catalog. It mirrors only configuration fields and
 /// source routes already consumed by the unchanged bundled Linux CLI.
 enum WindowsProviderConfigurationCatalog {
@@ -265,6 +282,16 @@ enum WindowsProviderConfigurationCatalog {
         .kilo, .kimi, .liteLLM, .llmProxy, .moonshot, .neuralwatt, .ollama, .openai,
         .openCodeGo, .openRouter, .poe, .sub2API, .synthetic, .venice, .warp, .xAI,
         .zai, .zenMux, .clawRouter, .clinePass, .deepSeek, .minimax,
+    ]
+
+    static let automaticSourceRoutes: [WindowsProviderID: WindowsAutomaticSourceRoute] = [
+        // Provider-specific by design: Claude's file-backed OAuth answers in seconds. Upstream's Linux Auto also
+        // tries OAuth, but only after its web route, so OAuth stays first with Auto as the fallback. Expired tokens
+        // remain delegated to Claude CLI.
+        .claude: .preferred("oauth"),
+        // Provider-specific by design: upstream added a web-only Gemini app source, so the Linux CLI refuses plain
+        // Auto for Gemini. Its API source keeps the existing Gemini CLI/OAuth route.
+        .gemini: .exclusive("api"),
     ]
 
     static let unavailableProviders: [WindowsProviderID: WindowsUnavailableProviderInfo] = [

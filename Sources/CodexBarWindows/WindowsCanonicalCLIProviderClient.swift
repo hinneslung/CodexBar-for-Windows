@@ -129,19 +129,21 @@ struct WindowsCanonicalCLIInvocation: Equatable, Sendable, CustomStringConvertib
         executablePath: String,
         providerID: String,
         executionMode: ExecutionMode = .usage,
-        preferredSource: String? = nil,
+        sourceRoute: WindowsAutomaticSourceRoute? = nil,
         windowsDirectory: String = ProcessInfo.processInfo.environment["WINDIR"] ?? "C:\\Windows") -> Self
     {
         let commandArguments =
             switch executionMode {
             case .usage:
                 ["usage", "--provider", providerID]
-                    + (preferredSource.map { ["--source", $0] } ?? [])
+                    + (sourceRoute.map { ["--source", $0.source] } ?? [])
                     + ["--json-only"]
             case .diagnose:
                 ["diagnose", "--provider", providerID, "--format", "json", "--redact"]
             }
-        // A preferred source is a fast first attempt; the ordinary automatic route remains its fallback.
+        // A preferred source is a fast first attempt whose fallback is the ordinary automatic route, so it is
+        // bounded and not retried. An exclusive source is the provider's only route and keeps normal behavior.
+        let isFastFirstAttempt = sourceRoute?.fallsBackToAutomatic == true
         return Self(
             executablePath: URL(fileURLWithPath: windowsDirectory)
                 .appendingPathComponent("System32/wsl.exe").path,
@@ -149,9 +151,9 @@ struct WindowsCanonicalCLIInvocation: Equatable, Sendable, CustomStringConvertib
             source: .init(distributionLabel: distribution, kind: .automatic, isResolved: false),
             distribution: distribution,
             standardInput: nil,
-            allowsRetry: preferredSource == nil,
+            allowsRetry: !isFastFirstAttempt,
             executionMode: executionMode,
-            timeoutOverride: preferredSource == nil ? nil : Self.preferredSourceProcessTimeout)
+            timeoutOverride: isFastFirstAttempt ? Self.preferredSourceProcessTimeout : nil)
     }
 
     // swiftlint:disable:next function_parameter_count
