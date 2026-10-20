@@ -250,6 +250,119 @@ struct WindowsConfiguredProviderDataSourceTests {
     }
 
     @Test
+    func `Claude automatic answers from fast OAuth without the interactive CLI route`() async throws {
+        let (snapshot, calls) = try await Self.fetchAutomaticClaude(responses: [
+            .init(output: Self.claudeUsagePayload(source: "oauth"), exitCode: 0),
+        ])
+
+        #expect(snapshot.availability == .available)
+        #expect(snapshot.sourceText == "Ubuntu · OAuth")
+        #expect(calls.count == 1)
+        #expect(
+            calls.first?.arguments == [
+                "-d", "Ubuntu", "--", "/usr/local/bin/codexbar",
+                "usage", "--provider", "claude", "--source", "oauth", "--json-only",
+            ])
+        #expect(calls.first?.timeout == WindowsCanonicalCLIInvocation.preferredSourceProcessTimeout)
+    }
+
+    @Test
+    func `Claude automatic falls back to the ordinary route once when OAuth fails`() async throws {
+        let (snapshot, calls) = try await Self.fetchAutomaticClaude(responses: [
+            .init(output: Self.claudeOAuthFailure, exitCode: 1),
+            .init(output: Self.claudeUsagePayload(source: "cli"), exitCode: 0),
+        ])
+
+        #expect(snapshot.availability == .available)
+        #expect(snapshot.sourceText == "Ubuntu · Provider CLI")
+        #expect(calls.count == 2)
+        #expect(calls.first?.arguments.contains("oauth") == true)
+        #expect(
+            calls.last?.arguments == [
+                "-d", "Ubuntu", "--", "/usr/local/bin/codexbar",
+                "usage", "--provider", "claude", "--json-only",
+            ])
+        #expect(calls.last?.timeout == 45)
+    }
+
+    @Test
+    func `Claude automatic falls back when OAuth exits cleanly with a provider error`() async throws {
+        let (snapshot, calls) = try await Self.fetchAutomaticClaude(responses: [
+            .init(output: Self.claudeOAuthFailure, exitCode: 0),
+            .init(output: Self.claudeUsagePayload(source: "cli"), exitCode: 0),
+        ])
+
+        #expect(snapshot.availability == .available)
+        #expect(snapshot.sourceText == "Ubuntu · Provider CLI")
+        #expect(calls.count == 2)
+        #expect(calls.last?.arguments.contains("--source") == false)
+    }
+
+    @Test
+    func `Claude automatic reports the ordinary route when OAuth and fallback both fail`() async throws {
+        let (snapshot, calls) = try await Self.fetchAutomaticClaude(responses: [
+            .init(output: Self.claudeOAuthFailure, exitCode: 1),
+            .init(output: Data(), exitCode: 1),
+            .init(output: Data(), exitCode: 1),
+        ])
+
+        #expect(snapshot.availability == .unavailable)
+        #expect(snapshot.sourceText == "Ubuntu · Automatic")
+        #expect(snapshot.safeErrorText?.contains("exit code 1") == true)
+        #expect(calls.count == 3)
+    }
+
+    @Test
+    func `cancellation after OAuth fails never starts the Claude fallback process`() async throws {
+        let relay = TaskCancellationRelay()
+        let outcome = SnapshotBox()
+        let task = Task {
+            let result = try? await Self.fetchAutomaticClaude(
+                responses: [
+                    .init(output: Self.claudeOAuthFailure, exitCode: 1),
+                    .init(output: Self.claudeUsagePayload(source: "cli"), exitCode: 0),
+                ],
+                onCall: { callIndex, _ in
+                    if callIndex == 0 { relay.cancel() }
+                })
+            outcome.set(result)
+        }
+        relay.attach(task)
+        await task.value
+
+        let (snapshot, calls) = try #require(outcome.value)
+        #expect(calls.count == 1)
+        #expect(snapshot.discardsRefreshResult)
+    }
+
+    @Test
+    func `a credential change during OAuth never starts the Claude fallback process`() async throws {
+        let (snapshot, calls) = try await Self.fetchAutomaticClaude(
+            responses: [
+                .init(output: Self.claudeOAuthFailure, exitCode: 1),
+                .init(output: Self.claudeUsagePayload(source: "cli"), exitCode: 0),
+            ],
+            usesCredentialVault: true,
+            onCall: { callIndex, vault in
+                guard callIndex == 0 else { return }
+                _ = try? vault?.save(
+                    provider: .claude,
+                    credentialSetID: "api-key",
+                    submittedValues: ["apiKey": "fictitious-claude-admin-key"])
+            })
+
+        #expect(calls.count == 1)
+        #expect(snapshot.discardsRefreshResult)
+    }
+
+    @Test
+    func `only Claude prefers a faster automatic source`() {
+        #expect(WindowsConfiguredProviderDataSource.automaticPreferredSource(for: .claude) == "oauth")
+        #expect(WindowsConfiguredProviderDataSource.automaticPreferredSource(for: .codex) == nil)
+        #expect(WindowsConfiguredProviderDataSource.automaticPreferredSource(for: .openCodeGo) == nil)
+    }
+
+    @Test
     func `five provider fetches run together while output order stays stable`() async {
         let inputs = Array(0..<7)
         let probe = ConcurrencyProbe(expectedInitialCount: 5)
@@ -406,6 +519,62 @@ struct WindowsConfiguredProviderDataSourceTests {
         }
         #expect(outcome.rejectedProviders == [.poe])
         #expect(committed.value == [.cursor])
+    }
+
+    private static func fetchAutomaticClaude(
+        responses: [SequencedInvocationCapture.Response],
+        usesCredentialVault: Bool = false,
+        onCall: (@Sendable (_ callIndex: Int, _ vault: WindowsProviderCredentialVault?) -> Void)? = nil)
+        async throws -> (WindowsProviderSnapshot, [SequencedInvocationCapture.Call])
+    {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "codexbar-claude-preferred-\(Foundation.UUID().uuidString)",
+            isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = WindowsConfigurationStore(fileURL: root.appendingPathComponent("config.json"))
+        try store.save(
+            WindowsAppConfiguration(providers: [
+                WindowsProviderConfiguration(id: .claude, enabled: true, order: 0),
+            ]))
+        let vault = usesCredentialVault
+            ? WindowsProviderCredentialVault(directoryURL: root.appendingPathComponent("Credentials"))
+            : nil
+        let capture = SequencedInvocationCapture(responses: responses) { callIndex in
+            onCall?(callIndex, vault)
+        }
+        let client = WindowsCanonicalCLIProviderClient(
+            processRunner: { _, arguments, timeout, _, _, _ in
+                capture.record(arguments: arguments, timeout: timeout)
+            },
+            retryDelay: {})
+        let dataSource = WindowsConfiguredProviderDataSource(
+            store: store,
+            environment: ["WINDIR": "C:\\Windows"],
+            wslDistributions: ["Ubuntu"],
+            cliDiscoveryCache: WindowsCanonicalCLIDiscoveryCache(
+                resolver: { _, _ in "/usr/local/bin/codexbar" }),
+            bundledCLIDiscoveryCache: WindowsCanonicalCLIDiscoveryCache(
+                resolver: { _, _ in "/opt/codexbar/CodexBarCLI" }),
+            cliClient: client,
+            credentialVault: vault)
+
+        let snapshot = try #require(await dataSource.fetchProviderSnapshots().first)
+        return (snapshot, capture.calls)
+    }
+
+    private static let claudeOAuthFailure = Data(
+        #"[{"provider":"claude","source":"oauth","error":{"kind":"provider","message":"No credentials"}}]"#.utf8)
+
+    private static func claudeUsagePayload(source: String) -> Data {
+        Data(
+            #"""
+            [{
+              "provider":"claude",
+              "source":"\#(source)",
+              "usage":{"primary":{"usedPercent":2,"resetsAt":"2026-10-20T07:30:00Z"}}
+            }]
+            """#
+                .utf8)
     }
 
     private static let longCatDiagnosticPayload = Data(
@@ -572,6 +741,79 @@ struct WindowsConfiguredProviderDataSourceTests {
                 continuation.resume()
             }
         }
+    }
+}
+
+private final class SequencedInvocationCapture: @unchecked Sendable {
+    struct Response {
+        let output: Data
+        let exitCode: Int32
+    }
+
+    struct Call {
+        let arguments: [String]
+        let timeout: TimeInterval
+    }
+
+    private let lock = NSLock()
+    private let onCall: @Sendable (Int) -> Void
+    private var responses: [Response]
+    private var storedCalls: [Call] = []
+
+    init(responses: [Response], onCall: @escaping @Sendable (Int) -> Void = { _ in }) {
+        self.responses = responses
+        self.onCall = onCall
+    }
+
+    var calls: [Call] {
+        self.lock.withLock { self.storedCalls }
+    }
+
+    func record(arguments: [String], timeout: TimeInterval) -> WindowsHiddenProcessResult {
+        let (callIndex, response) = self.lock.withLock {
+            self.storedCalls.append(Call(arguments: arguments, timeout: timeout))
+            return (
+                self.storedCalls.count - 1,
+                self.responses.isEmpty
+                    ? Response(output: Data(), exitCode: 1)
+                    : self.responses.removeFirst())
+        }
+        self.onCall(callIndex)
+        return WindowsHiddenProcessResult(
+            standardOutput: response.output,
+            standardError: Data(),
+            exitCode: response.exitCode)
+    }
+}
+
+private final class SnapshotBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: (WindowsProviderSnapshot, [SequencedInvocationCapture.Call])?
+
+    var value: (WindowsProviderSnapshot, [SequencedInvocationCapture.Call])? {
+        self.lock.withLock { self.stored }
+    }
+
+    func set(_ value: (WindowsProviderSnapshot, [SequencedInvocationCapture.Call])?) {
+        self.lock.withLock { self.stored = value }
+    }
+}
+
+/// Cancels a task from inside a stubbed process. `cancel()` waits for the task handle, so the cancellation is in
+/// effect before the stubbed process returns even when the stub runs before `attach(_:)`.
+private final class TaskCancellationRelay: @unchecked Sendable {
+    private let lock = NSLock()
+    private let attached = DispatchSemaphore(value: 0)
+    private var task: Task<Void, Never>?
+
+    func attach(_ task: Task<Void, Never>) {
+        self.lock.withLock { self.task = task }
+        self.attached.signal()
+    }
+
+    func cancel() {
+        _ = self.attached.wait(timeout: .now() + 5)
+        self.lock.withLock { self.task }?.cancel()
     }
 }
 

@@ -352,6 +352,24 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
                     authorityCheck: credentialRoute.check)
             }
         }
+        if automaticExecutionMode == .usage,
+           let preferredSource = Self.automaticPreferredSource(for: provider.id)
+        {
+            let preferred = await self.cliClient.fetch(
+                provider: provider.id,
+                profileID: provider.profileID,
+                invocation: .wsl(
+                    distribution: automaticCLI.distribution,
+                    executablePath: automaticCLI.executablePath,
+                    providerID: provider.id.cliName,
+                    preferredSource: preferredSource,
+                    windowsDirectory: windowsDirectory),
+                environmentOverrides: [:],
+                authorityCheck: credentialRoute.check)
+            if preferred.availability == .available || preferred.discardsRefreshResult {
+                return preferred
+            }
+        }
         let invocation = WindowsCanonicalCLIInvocation.wsl(
             distribution: automaticCLI.distribution,
             executablePath: automaticCLI.executablePath,
@@ -483,6 +501,13 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
             }
         }
         return nil
+    }
+
+    /// Provider-specific by design: Claude's CLI-runtime Auto skips OAuth and scrapes an interactive Claude session,
+    /// which regularly outlasts the WSL usage timeout. Its file-backed OAuth credentials answer in seconds, and
+    /// expired tokens stay delegated to Claude CLI, so OAuth runs first with the ordinary Auto route as fallback.
+    static func automaticPreferredSource(for provider: WindowsProviderID) -> String? {
+        provider == .claude ? "oauth" : nil
     }
 
     static func resolveAutomaticCLI(
