@@ -8,10 +8,6 @@ struct ProcessEnvironment<Value: Sendable & Equatable>: Sendable, Equatable,
 {
     var wrappedValue: Value
 
-    init(wrappedValue: Value) where Value == [String: String] {
-        self.wrappedValue = wrappedValue
-    }
-
     var description: String {
         "ProcessEnvironment(\(self.entryCount) entries; redacted)"
     }

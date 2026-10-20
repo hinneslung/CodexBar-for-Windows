@@ -67,6 +67,10 @@
 - **Package and release:** [packaging](docs/windows-development.md#packaging) and [release process](docs/windows-fork.md#builds-and-releases).
 - **Upstream references:** [CLI](docs/cli.md), [provider implementation](docs/provider.md), and [upstream repository](https://github.com/steipete/CodexBar). For features available in the Windows app, use the Windows user guide.
 
+<!-- Upstream site tooling keeps this social card reference current; it is intentionally not shown here.
+<img src="docs/social.png?v=60784c48f741564c" alt="">
+-->
+
 <details>
 <summary>Upstream provider guides</summary>
 
