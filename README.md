@@ -67,6 +67,34 @@
 - **Package and release:** [packaging](docs/windows-development.md#packaging) and [release process](docs/windows-fork.md#builds-and-releases).
 - **Upstream references:** [CLI](docs/cli.md), [provider implementation](docs/provider.md), and [upstream repository](https://github.com/steipete/CodexBar). For features available in the Windows app, use the Windows user guide.
 
+<details>
+<summary>Upstream provider guides</summary>
+
+Guides for providers added to upstream CodexBar. Not every provider is available in the Windows app; Settings shows each provider's status.
+
+<!-- Generated provider additions: Scripts/regenerate-provider-docs.mjs -->
+- [Langdock](docs/langdock.md) — Selected Edge, Chrome, or Safari profile → personal included session and weekly limits (`web`, macOS).
+- [X API](docs/xapi.md) — Browser or manual console.x.com cookies for prepaid and free credits, including negative balances.
+- [Future AGI](docs/futureagi.md) — API key and secret key (billing-period usage, allowances, and estimated cost).
+- [LithosAI](docs/lithosai.md) — Browser or manual console cookies for prepaid USD balance and optional UTC spend.
+- [WorkBuddy](docs/workbuddy.md) — Chrome or manual www.workbuddy.cn cookies for the monthly credits allowance, plan name, and cycle reset.
+- [Tavily](docs/tavily.md) — API key for account-plan, per-key, and pay-as-you-go credit totals.
+- [Linkup](docs/linkup.md) — API key for the current prepaid USD credit balance.
+- [TinyApi](docs/tinyapi.md) — Browser or manual session cookies for aggregate available credits.
+- [Exa](docs/exa.md) — Team Management service key plus an explicit API key ID for month-to-date USD spend.
+- [Cosmic AI](docs/cosmic.md) — Explicit Personal Access Token and Project ID for separate project AI input/output counters and allowances.
+- [Aerostack](docs/aerostack.md) — Explicit account JWT for monthly AI tokens used and the observed account allowance.
+- [Sail Research](docs/sailresearch.md) — API key for organization credit balance and combined inference/Sailbox spend.
+- [Sofya](docs/sofya.md) — API key for separate account plan and purchased credit balances, eligibility, and the reported monthly reset.
+- [fal](docs/fal.md) — API key with billing read access for the current account credit balance.
+- [FLORA](docs/flora.md) — API key with billing permission plus a workspace ID for the available USD balance and month-to-date spend.
+- [Parallel](docs/parallel.md) — Browser session on platform.parallel.ai for the prepaid credit balance and pending debit.
+- [Claude Platform](docs/claudeplatform.md) — Browser or manual platform.claude.com session cookies for Console API credit balance, expiring credit grants, and month-to-date spend.
+- [Munito](docs/munito.md) — Admin API key with Read account data permission for today's and this month's spend against the organization's spend limits.
+<!-- End generated provider additions -->
+
+</details>
+
 ## Credits and license
 
 - Based on [CodexBar](https://github.com/steipete/CodexBar) by Peter Steinberger and contributors.
