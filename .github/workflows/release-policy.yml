@@ -8,6 +8,8 @@ on:
 permissions: {}
 jobs:
   policy:
+    # Windows fork: this checks upstream's release structure, which the fork's Windows release workflow replaces.
+    if: github.repository == 'steipete/CodexBar'
     runs-on: ubuntu-24.04
     permissions:
       contents: read

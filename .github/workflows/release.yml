@@ -26,6 +26,8 @@ env:
 
 jobs:
   validate:
+    # Windows fork: upstream's macOS publication pipeline must not run on fork tags. Every later job needs this one.
+    if: github.repository == 'steipete/CodexBar'
     runs-on: ubuntu-24.04
     permissions:
       contents: read

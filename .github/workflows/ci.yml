@@ -252,6 +252,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Verify upstream CLI and core are unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="$(tr -d '[:space:]' < .github/windows-upstream-base)"
+          git fetch --no-tags --depth=1 https://github.com/steipete/CodexBar.git \
+            "refs/tags/${base}:refs/tags/windows-upstream-base"
+          git diff --exit-code --stat windows-upstream-base HEAD -- Sources/CodexBarCore Sources/CodexBarCLI
+
       - name: Install Swift ${{ env.SWIFT_VERSION }}
         uses: compnerd/gha-setup-swift@eeda069c5bc95ac8a9ac5cea7d4f588ae5420ca5
         with:
