@@ -44,6 +44,7 @@ struct WindowsCanonicalCLIInvocation: Equatable, Sendable, CustomStringConvertib
     static let diagnosticProcessTimeout: TimeInterval = 90
     static let stagedDiagnosticLauncherTimeoutSeconds = 75
     static let stagedUsageLauncherTimeoutSeconds = 50
+    static let preferredSourceProcessTimeout: TimeInterval = 20
 
     enum ExecutionMode: String, Equatable, Sendable {
         case usage
@@ -57,6 +58,7 @@ struct WindowsCanonicalCLIInvocation: Equatable, Sendable, CustomStringConvertib
     let standardInput: Data?
     let allowsRetry: Bool
     let executionMode: ExecutionMode
+    let timeoutOverride: TimeInterval?
 
     init(
         executablePath: String,
@@ -65,7 +67,8 @@ struct WindowsCanonicalCLIInvocation: Equatable, Sendable, CustomStringConvertib
         distribution: String,
         standardInput: Data?,
         allowsRetry: Bool,
-        executionMode: ExecutionMode = .usage)
+        executionMode: ExecutionMode = .usage,
+        timeoutOverride: TimeInterval? = nil)
     {
         self.executablePath = executablePath
         self.arguments = arguments
@@ -74,6 +77,7 @@ struct WindowsCanonicalCLIInvocation: Equatable, Sendable, CustomStringConvertib
         self.standardInput = standardInput
         self.allowsRetry = allowsRetry
         self.executionMode = executionMode
+        self.timeoutOverride = timeoutOverride
     }
 
     init(
@@ -115,6 +119,7 @@ struct WindowsCanonicalCLIInvocation: Equatable, Sendable, CustomStringConvertib
     }
 
     var processTimeout: TimeInterval {
+        if let timeoutOverride = self.timeoutOverride { return timeoutOverride }
         if self.executionMode == .diagnose { return Self.diagnosticProcessTimeout }
         return self.standardInput == nil ? 45 : 60
     }
@@ -124,15 +129,19 @@ struct WindowsCanonicalCLIInvocation: Equatable, Sendable, CustomStringConvertib
         executablePath: String,
         providerID: String,
         executionMode: ExecutionMode = .usage,
+        preferredSource: String? = nil,
         windowsDirectory: String = ProcessInfo.processInfo.environment["WINDIR"] ?? "C:\\Windows") -> Self
     {
         let commandArguments =
             switch executionMode {
             case .usage:
-                ["usage", "--provider", providerID, "--json-only"]
+                ["usage", "--provider", providerID]
+                    + (preferredSource.map { ["--source", $0] } ?? [])
+                    + ["--json-only"]
             case .diagnose:
                 ["diagnose", "--provider", providerID, "--format", "json", "--redact"]
             }
+        // A preferred source is a fast first attempt; the ordinary automatic route remains its fallback.
         return Self(
             executablePath: URL(fileURLWithPath: windowsDirectory)
                 .appendingPathComponent("System32/wsl.exe").path,
@@ -140,8 +149,9 @@ struct WindowsCanonicalCLIInvocation: Equatable, Sendable, CustomStringConvertib
             source: .init(distributionLabel: distribution, kind: .automatic, isResolved: false),
             distribution: distribution,
             standardInput: nil,
-            allowsRetry: true,
-            executionMode: executionMode)
+            allowsRetry: preferredSource == nil,
+            executionMode: executionMode,
+            timeoutOverride: preferredSource == nil ? nil : Self.preferredSourceProcessTimeout)
     }
 
     // swiftlint:disable:next function_parameter_count
@@ -469,8 +479,11 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
         environmentOverrides: [String: String],
         authorityCheck: (@Sendable () throws -> Bool)?) async throws -> ProviderAttempt
     {
+        // A cancelled refresh must not start another CLI process, including a preferred-source fallback.
+        try Task.checkCancellation()
         let operation = Task.detached(priority: .utility) {
             try WindowsProviderOperationLock.withLock(profileID: profileID) {
+                try Task.checkCancellation()
                 guard try authorityCheck?() ?? true else {
                     throw WindowsCanonicalCLIError.staleCredential
                 }
