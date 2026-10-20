@@ -600,7 +600,7 @@ enum WindowsProviderConfigurationCatalog {
             set: Self.browserSet(
                 site: "opencode.ai",
                 hosts: ["opencode.ai", "app.opencode.ai"],
-                requiredCookieNames: ["auth", "__Host-auth"],
+                requiredCookieNames: ["auth", "__Host-auth", "__Host-console_session"],
                 companions: [Self.openCodeWorkspace],
                 executionMode: .diagnose)),
         Self.apiSchema(
@@ -618,7 +618,7 @@ enum WindowsProviderConfigurationCatalog {
                         Self.browserField(
                             site: "opencode.ai",
                             hosts: ["opencode.ai", "app.opencode.ai"],
-                            requiredCookieNames: ["auth", "__Host-auth"]),
+                            requiredCookieNames: ["auth", "__Host-auth", "__Host-console_session"]),
                         Self.openCodeWorkspace,
                     ],
                     role: .alternateRoute,

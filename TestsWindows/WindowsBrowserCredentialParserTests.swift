@@ -147,6 +147,19 @@ struct WindowsBrowserCredentialParserTests {
     }
 
     @Test
+    func `OpenCode browser sessions accept a migrated Console cookie`() throws {
+        for provider in [WindowsProviderID.openCode, .openCodeGo] {
+            let field = try Self.browserField(provider)
+            let consoleOnly = "oc_locale=en; __Host-console_session=fixture-console"
+            let mixed = "auth=fixture-legacy; __Host-console_session=fixture-console"
+            #expect(field.accepts(consoleOnly), "Console-only session rejected for \(provider)")
+            #expect(field.accepts(mixed), "Mixed session rejected for \(provider)")
+            #expect(try #require(field.displaySafeValidationResult(consoleOnly)).normalizedValue == consoleOnly)
+            #expect(!field.accepts("oc_locale=en; theme=dark"), "Session-less cookie accepted for \(provider)")
+        }
+    }
+
+    @Test
     func `cookie parser rejects malformed and wrong-host captures`() throws {
         let field = try Self.browserField(.openCodeGo)
         let rejected = [
