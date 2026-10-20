@@ -45,6 +45,41 @@ struct WindowsCanonicalCLIProviderClientTests {
     }
 
     @Test
+    func `upstream window labels name each standard window by slot`() throws {
+        let labeled = try Self.decodeWindows(
+            usage: #""primary":{"usedPercent":10},"secondary":{"usedPercent":20},"tertiary":{"usedPercent":30}"#,
+            labels: #"{"primary":"Five-hour quota","secondary":"Weekly tokens","tertiary":"Search hourly"}"#)
+        #expect(labeled == ["Five-hour quota", "Weekly tokens", "Search hourly"])
+
+        let secondaryOnly = try Self.decodeWindows(
+            usage: #""primary":null,"secondary":{"usedPercent":20}"#,
+            labels: #"{"primary":"5-hour","secondary":"Weekly"}"#)
+        #expect(secondaryOnly == ["Weekly"])
+
+        let partial = try Self.decodeWindows(
+            usage: #""primary":{"usedPercent":10},"secondary":{"usedPercent":20}"#,
+            labels: #"{"primary":"Credits","secondary":"   "}"#)
+        #expect(partial == ["Credits", "Weekly"])
+    }
+
+    @Test
+    func `missing or malformed window labels keep the generic names`() throws {
+        let usage = #""primary":{"usedPercent":10},"secondary":{"usedPercent":20},"tertiary":{"usedPercent":30}"#
+        for labels in [nil, #""oops""#, #"{"primary":5,"secondary":["Weekly"]}"#, "null"] {
+            #expect(try Self.decodeWindows(usage: usage, labels: labels) == ["Session", "Weekly", "Monthly"])
+        }
+    }
+
+    private static func decodeWindows(usage: String, labels: String?) throws -> [String] {
+        let labelsField = labels.map { #","rateWindowLabels":\#($0)"# } ?? ""
+        let payload = #"[{"provider":"synthetic","usage":{\#(usage)}\#(labelsField)}]"#
+        return try WindowsCanonicalCLIProviderClient.decode(
+            data: Data(payload.utf8),
+            requestedProvider: WindowsProviderID("synthetic"),
+            sourceText: "WSL CLI · Ubuntu").windows.map(\.label)
+    }
+
+    @Test
     func `unread credits stay absent through decoder and presentation`() throws {
         let snapshot = try Self.decodeCredits(remaining: 0, readFlag: "false")
         let row = try #require(

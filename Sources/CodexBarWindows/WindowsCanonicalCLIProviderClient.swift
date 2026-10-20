@@ -371,9 +371,21 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
         }
 
         var windows: [WindowsProviderWindowSnapshot] = []
-        Self.append(payload.usage?.primary, defaultLabel: "Session", to: &windows)
-        Self.append(payload.usage?.secondary, defaultLabel: "Weekly", to: &windows)
-        Self.append(payload.usage?.tertiary, defaultLabel: "Monthly", to: &windows)
+        // Labels are matched to their slot before absent windows are skipped, so a secondary-only reading
+        // cannot inherit the primary label. Older CLIs omit the labels and keep the generic names.
+        let labels = payload.rateWindowLabels
+        Self.append(
+            payload.usage?.primary,
+            defaultLabel: Self.normalized(labels?.primary) ?? "Session",
+            to: &windows)
+        Self.append(
+            payload.usage?.secondary,
+            defaultLabel: Self.normalized(labels?.secondary) ?? "Weekly",
+            to: &windows)
+        Self.append(
+            payload.usage?.tertiary,
+            defaultLabel: Self.normalized(labels?.tertiary) ?? "Monthly",
+            to: &windows)
         for extra in payload.usage?.extraRateWindows ?? [] where extra.usageKnown != false {
             Self.append(extra.window, defaultLabel: extra.title, to: &windows)
         }
@@ -692,6 +704,28 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
         let usage: Usage?
         let credits: Credits?
         let error: ErrorPayload?
+        let rateWindowLabels: RateWindowLabels?
+    }
+
+    /// Provider-specific names for the three standard windows. Optional presentation data: a malformed value is
+    /// treated as absent instead of failing the usage reading.
+    private struct RateWindowLabels: Decodable {
+        let primary: String?
+        let secondary: String?
+        let tertiary: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case primary
+            case secondary
+            case tertiary
+        }
+
+        init(from decoder: Decoder) {
+            let container = try? decoder.container(keyedBy: CodingKeys.self)
+            self.primary = (try? container?.decodeIfPresent(String.self, forKey: .primary)) ?? nil
+            self.secondary = (try? container?.decodeIfPresent(String.self, forKey: .secondary)) ?? nil
+            self.tertiary = (try? container?.decodeIfPresent(String.self, forKey: .tertiary)) ?? nil
+        }
     }
 
     private struct Usage: Decodable {
