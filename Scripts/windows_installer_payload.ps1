@@ -44,7 +44,8 @@ function Expand-VerifiedWindowsPayload {
         'FoundationEssentials.dll', 'msvcp140.dll', 'swiftCore.dll', 'swiftCRT.dll', 'swiftWinSDK.dll',
         'swift_Concurrency.dll', 'vcruntime140.dll', 'VERSION', 'wsl-cli/CodexBarCLI',
         'wsl-cli/CodexBarCLI.sha256', 'wsl-cli/CodexBarStagingLauncher',
-        'wsl-cli/CodexBarStagingLauncher.sha256', 'wsl-cli/VERSION', 'wsl-cli/CodexBar_CodexBarCore.bundle')
+        'wsl-cli/CodexBarStagingLauncher.sha256', 'wsl-cli/VERSION', 'wsl-cli/THIRD_PARTY_NOTICES',
+        'wsl-cli/CodexBar_CodexBarCore.bundle')
     if ($Architecture -eq 'x86_64') { $required += 'vcruntime140_1.dll' }
     foreach ($path in $required) {
         if (-not (Test-Path -LiteralPath (Join-Path $Destination $path))) { throw "Missing payload item: $path" }
@@ -54,7 +55,7 @@ function Expand-VerifiedWindowsPayload {
             ($item.PSIsContainer -or $item.Extension -ine '.dll')) { throw 'Unexpected payload root item.' }
     }
     $expectedWSL = @('CodexBarCLI', 'CodexBarCLI.sha256', 'CodexBarStagingLauncher',
-        'CodexBarStagingLauncher.sha256', 'CodexBar_CodexBarCore.bundle', 'VERSION')
+        'CodexBarStagingLauncher.sha256', 'CodexBar_CodexBarCore.bundle', 'THIRD_PARTY_NOTICES', 'VERSION')
     if (Compare-Object $expectedWSL @(Get-ChildItem (Join-Path $Destination 'wsl-cli') | ForEach-Object Name)) {
         throw 'Unexpected WSL payload layout.'
     }

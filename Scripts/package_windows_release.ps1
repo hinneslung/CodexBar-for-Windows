@@ -231,7 +231,7 @@ try {
         }
     }
 
-    $cliPayloadItems = @('CodexBar_CodexBarCore.bundle', 'CodexBarCLI', 'VERSION')
+    $cliPayloadItems = @('CodexBar_CodexBarCore.bundle', 'CodexBarCLI', 'THIRD_PARTY_NOTICES', 'VERSION')
     foreach ($payloadName in $cliPayloadItems) {
         $payloadSource = Join-Path $cliExtractDirectory $payloadName
         if (-not (Test-Path -LiteralPath $payloadSource)) {
@@ -261,6 +261,7 @@ try {
         'CodexBarCLI.sha256',
         'CodexBarStagingLauncher',
         'CodexBarStagingLauncher.sha256',
+        'THIRD_PARTY_NOTICES',
         'VERSION'
     )
 
@@ -315,6 +316,7 @@ try {
         'wsl-cli/CodexBarStagingLauncher',
         'wsl-cli/CodexBarStagingLauncher.sha256',
         'wsl-cli/VERSION',
+        'wsl-cli/THIRD_PARTY_NOTICES',
         'wsl-cli/CodexBar_CodexBarCore.bundle'
     )
     if ($AssetArchitecture -eq 'x86_64') {

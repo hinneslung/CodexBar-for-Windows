@@ -99,6 +99,7 @@ try {
     New-Item -ItemType Directory `
         -Path (Join-Path $payloadDirectory 'CodexBar_CodexBarCore.bundle') | Out-Null
     [IO.File]::WriteAllText((Join-Path $payloadDirectory 'VERSION'), '1.0')
+    [IO.File]::WriteAllText((Join-Path $payloadDirectory 'THIRD_PARTY_NOTICES'), 'notices')
 
     $wslTestRoot = (wsl.exe --exec wslpath -a ($testRoot.Replace('\', '/'))).Trim()
     $wslRepositoryRoot = (wsl.exe --exec wslpath -a ($repositoryRoot.Replace('\', '/'))).Trim()
@@ -120,7 +121,7 @@ try {
     }
 
     $archive = Join-Path $testRoot 'CodexBarCLI-v1.0-linux-musl-x86_64.tar.gz'
-    tar -czf $archive -C $payloadDirectory CodexBarCLI CodexBar_CodexBarCore.bundle VERSION
+    tar -czf $archive -C $payloadDirectory CodexBarCLI CodexBar_CodexBarCore.bundle THIRD_PARTY_NOTICES VERSION
     if ($LASTEXITCODE -ne 0) {
         throw 'Could not create the package CLI fixture archive.'
     }
@@ -129,11 +130,12 @@ try {
     New-Item -ItemType Directory `
         -Path (Join-Path $armPayloadDirectory 'CodexBar_CodexBarCore.bundle') | Out-Null
     [IO.File]::WriteAllText((Join-Path $armPayloadDirectory 'VERSION'), '1.0')
+    [IO.File]::WriteAllText((Join-Path $armPayloadDirectory 'THIRD_PARTY_NOTICES'), 'notices')
     New-FakeStaticELF -Path (Join-Path $armPayloadDirectory 'CodexBarCLI') -Machine 183
     $armLauncher = Join-Path $testRoot 'CodexBarStagingLauncher-linux-musl-aarch64'
     New-FakeStaticELF -Path $armLauncher -Machine 183
     $armArchive = Join-Path $testRoot 'CodexBarCLI-v1.0-linux-musl-aarch64.tar.gz'
-    tar -czf $armArchive -C $armPayloadDirectory CodexBarCLI CodexBar_CodexBarCore.bundle VERSION
+    tar -czf $armArchive -C $armPayloadDirectory CodexBarCLI CodexBar_CodexBarCore.bundle THIRD_PARTY_NOTICES VERSION
     if ($LASTEXITCODE -ne 0) {
         throw 'Could not create the ARM64 package CLI fixture archive.'
     }
