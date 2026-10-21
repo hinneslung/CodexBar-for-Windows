@@ -356,6 +356,52 @@ struct WindowsConfiguredProviderDataSourceTests {
     }
 
     @Test
+    func `a bridged BigModel key stages its region over a saved z.ai region`() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "codexbar-zai-bridge-region-\(Foundation.UUID().uuidString)",
+            isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = WindowsConfigurationStore(fileURL: root.appendingPathComponent("config.json"))
+        try store.save(
+            WindowsAppConfiguration(providers: [
+                WindowsProviderConfiguration(
+                    id: .zai, enabled: true, order: 0, companionValues: ["region": "global"]),
+            ]))
+        let invocation = DataSourceInvocationCapture(output: Data(#"[{"provider":"zai","usage":{}}]"#.utf8))
+        let dataSource = WindowsConfiguredProviderDataSource(
+            store: store,
+            environment: ["WINDIR": "C:\\Windows"],
+            wslDistributions: ["Ubuntu"],
+            cliDiscoveryCache: WindowsCanonicalCLIDiscoveryCache(
+                resolver: { _, _ in "/usr/local/bin/codexbar" }),
+            bundledCLIDiscoveryCache: WindowsCanonicalCLIDiscoveryCache(
+                resolver: { _, _ in "/opt/codexbar/CodexBarCLI" }),
+            cliClient: WindowsCanonicalCLIProviderClient(
+                processRunner: { executable, arguments, timeout, _, environment, standardInput in
+                    invocation.record(
+                        executable: executable,
+                        arguments: arguments,
+                        timeout: timeout,
+                        environment: environment,
+                        standardInput: standardInput)
+                },
+                retryDelay: {}),
+            credentialBridge: WindowsProviderCredentialBridge(authDataLoader: { _ in
+                Data(#"{"zhipuai":{"type":"api","key":"fixture-zhipu"}}"#.utf8)
+            }),
+            credentialVault: nil)
+
+        _ = await dataSource.fetchProviderSnapshots()
+
+        let stagedInput = try #require(invocation.standardInput)
+        let staged = try #require(JSONSerialization.jsonObject(with: stagedInput) as? [String: Any])
+        let provider = try #require((staged["providers"] as? [[String: Any]])?.first)
+        #expect(provider["region"] as? String == "bigmodel-cn")
+        #expect(provider["apiKey"] == nil)
+        #expect(invocation.environment["Z_AI_API_KEY"] == "fixture-zhipu")
+    }
+
+    @Test
     func `a provider removed upstream is never sent to the CLI`() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "codexbar-removed-upstream-\(Foundation.UUID().uuidString)",

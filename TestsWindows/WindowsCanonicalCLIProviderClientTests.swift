@@ -80,6 +80,8 @@ struct WindowsCanonicalCLIProviderClientTests {
         #expect(try Self.decodeBalance(usage: window + usd) == "$12.50 remaining")
         #expect(try Self.decodeBalance(usage: window + euro) == "-3.00 EUR remaining")
         #expect(try Self.decodeBalance(usage: window + unavailable) == nil)
+        let shared = cost(#""currencyCode":"USD","balance":40,"balanceIsWorkspace":true"#)
+        #expect(try Self.decodeBalance(usage: window + shared) == "$40.00 workspace balance")
         #expect(try Self.decodeBalance(usage: window + cost(#""currencyCode":"USD""#)) == nil)
         #expect(try Self.decodeBalance(usage: window + #","providerCost":"oops""#) == nil)
         #expect(

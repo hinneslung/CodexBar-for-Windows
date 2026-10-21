@@ -207,8 +207,9 @@ struct WindowsProviderCredentialBridge: Sendable {
         .init(
             provider: .zai,
             candidates: [
-                // Provider-specific by design: upstream reads the z.ai region only from config, and without
-                // bigmodel-cn it ignores BigModel keys such as ZHIPU_API_KEY.
+                // Provider-specific by design: upstream reads the z.ai region only from config. Every key is
+                // exported as Z_AI_API_KEY, which upstream prefers in both regions, so an inherited key cannot
+                // replace the selected OpenCode credential.
                 .init(
                     "zai",
                     secretEnvironmentKey: "Z_AI_API_KEY",
@@ -219,11 +220,11 @@ struct WindowsProviderCredentialBridge: Sendable {
                     stagedCompanionValues: ["region": "global"]),
                 .init(
                     "zhipuai",
-                    secretEnvironmentKey: "ZHIPU_API_KEY",
+                    secretEnvironmentKey: "Z_AI_API_KEY",
                     stagedCompanionValues: ["region": "bigmodel-cn"]),
                 .init(
                     "zhipuai-coding-plan",
-                    secretEnvironmentKey: "ZHIPU_API_KEY",
+                    secretEnvironmentKey: "Z_AI_API_KEY",
                     stagedCompanionValues: ["region": "bigmodel-cn"]),
             ]),
     ]

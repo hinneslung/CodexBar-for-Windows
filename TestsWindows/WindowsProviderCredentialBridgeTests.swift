@@ -73,9 +73,9 @@ struct WindowsProviderCredentialBridgeTests {
         #expect(moonshot["MOONSHOT_API_KEY"] == "moonshot-secret")
         #expect(moonshot["MOONSHOT_REGION"] == "china")
         // Upstream reads the z.ai region only from config, so it is staged instead of exported.
-        #expect(zai.environment["ZHIPU_API_KEY"] == "zhipu-secret")
+        #expect(zai.environment["Z_AI_API_KEY"] == "zhipu-secret")
         #expect(zai.environment["Z_AI_REGION"] == nil)
-        #expect(zai.environment["WSLENV"] == "ZHIPU_API_KEY")
+        #expect(zai.environment["WSLENV"] == "Z_AI_API_KEY")
         #expect(zai.companionValues == ["region": "bigmodel-cn"])
     }
 

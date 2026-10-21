@@ -121,7 +121,9 @@ struct WindowsProviderUpdatesTests {
         let payload = try Self.provider(config)
         #expect(payload["region"] as? String == "bigmodel-cn")
         #expect(payload["apiKey"] == nil)
-        #expect(projection.environment["ZHIPU_API_KEY"] == "fixture-zhipu")
+        // Exported under the key upstream prefers, so an inherited Z_AI_API_KEY cannot replace it.
+        #expect(projection.environment["Z_AI_API_KEY"] == "fixture-zhipu")
+        #expect(projection.environment["ZHIPU_API_KEY"] == nil)
     }
 
     @Test

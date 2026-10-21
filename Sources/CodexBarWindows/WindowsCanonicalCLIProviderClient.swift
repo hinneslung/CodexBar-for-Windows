@@ -406,7 +406,8 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
         if balanceText == nil, let cost = payload.usage?.providerCost, cost.balanceIsUnavailable != true,
            let balance = cost.balance
         {
-            balanceText = "\(Self.currencyAmount(balance, currencyCode: cost.currencyCode)) remaining"
+            let amount = Self.currencyAmount(balance, currencyCode: cost.currencyCode)
+            balanceText = cost.balanceIsWorkspace == true ? "\(amount) workspace balance" : "\(amount) remaining"
         }
         let accountText = Self.normalized(payload.account)
         let updatedAt = payload.usage?.updatedAt ?? payload.credits?.updatedAt ?? Date()
@@ -790,6 +791,7 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
         let currencyCode: String?
         let balance: Double?
         let balanceIsUnavailable: Bool?
+        let balanceIsWorkspace: Bool?
     }
 
     private struct CodexResetCredits: Decodable {
