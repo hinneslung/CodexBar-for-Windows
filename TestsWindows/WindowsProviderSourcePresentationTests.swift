@@ -103,7 +103,7 @@ struct WindowsProviderSourcePresentationTests {
         #expect(
             WindowsProviderConfigurationCatalog.automaticCredentialDescription(provider: .clinePass)
                 == "Automatically uses this provider's OpenCode connection when available. Otherwise, it uses "
-                + "credentials already configured in CodexBar CLI. "
+                + "credentials from its app or CLI or existing CodexBar CLI configuration. "
                 + "Select a manual option if Automatic fails.")
         #expect(
             WindowsProviderConfigurationCatalog.automaticCredentialDescription(provider: .deepgram)
@@ -146,7 +146,7 @@ struct WindowsProviderSourcePresentationTests {
                 == "Provider app/CLI · API key · Browser session")
         #expect(
             WindowsProviderCapabilityPresentation.summary(provider: .kimi)
-                == "Provider app/CLI · OpenCode · API key")
+                == "Provider app/CLI · OpenCode · API key · Browser session")
         #expect(
             WindowsProviderCapabilityPresentation.summary(provider: .openCodeGo)
                 == "OpenCode · API key · Browser session")
@@ -195,16 +195,16 @@ struct WindowsProviderSourcePresentationTests {
         }
         #expect(
             WindowsProviderCapabilityPresentation.summary(provider: .cursor)
-                == "Browser session")
+                == "Provider app/CLI · Browser session")
     }
 
     @Test
     func `provider sign-in metadata remains tied to reviewed upstream routes`() throws {
         let cliProviders: Set<WindowsProviderID> = [
-            .amp, .antigravity, .augment, .claude, .codex, .doubao, .grok, .kilo, .kiro,
+            .amp, .antigravity, .augment, .claude, .codex, .cursor, .doubao, .grok, .kilo, .kiro,
         ]
         let providerStateProviders: Set<WindowsProviderID> = [
-            .bedrock, .codebuff, .gemini, .jetBrains, .kimi, .vertexAI,
+            .bedrock, .clinePass, .codebuff, .gemini, .jetBrains, .kimi, .vertexAI,
         ]
         let localSourceProviders: Set<WindowsProviderID> = [.factory, .wayfinder]
         #expect(
@@ -235,6 +235,7 @@ struct WindowsProviderSourcePresentationTests {
             .augment: "Augment/AugmentProviderDescriptor.swift",
             .claude: "Claude/ClaudeProviderDescriptor.swift",
             .codex: "Codex/CodexProviderDescriptor.swift",
+            .cursor: "Cursor/CursorProviderDescriptor.swift",
             .doubao: "Doubao/DoubaoProviderDescriptor.swift",
             .grok: "Grok/GrokProviderDescriptor.swift",
             .kilo: "Kilo/KiloProviderDescriptor.swift",
@@ -249,6 +250,7 @@ struct WindowsProviderSourcePresentationTests {
 
         let stateEvidence: [(String, String)] = [
             ("Bedrock/BedrockProviderDescriptor.swift", "BedrockSettingsReader.profile(environment:"),
+            ("ClinePass/ClinePassSettingsReader.swift", "settings/providers.json"),
             (
                 "Codebuff/CodebuffProviderDescriptor.swift",
                 "CodebuffSettingsReader.authToken(authFileURL:"),
@@ -278,7 +280,7 @@ struct WindowsProviderSourcePresentationTests {
 
     @Test
     func `unavailable provider metadata is the single configuration gate`() throws {
-        let expected: Set<WindowsProviderID> = [.abacus, .crof, .devin, .windsurf, .zed]
+        let expected: Set<WindowsProviderID> = [.abacus, .crof, .windsurf, .zed]
         #expect(WindowsProviderConfigurationCatalog.unavailableProviderIDs == expected)
         #expect(Set(WindowsProviderConfigurationCatalog.unavailableProviders.keys) == expected)
 

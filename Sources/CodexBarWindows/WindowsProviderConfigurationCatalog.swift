@@ -8,6 +8,7 @@ struct WindowsProviderConfigurationField: Sendable, Equatable {
         case region
         case workspaceID
         case enterpriseHost
+        case azureOpenAIAPIVersion
     }
 
     enum Style: Sendable, Equatable {
@@ -224,8 +225,10 @@ enum WindowsProviderConfigurationCatalog {
         .augment: .providerCLI,
         .bedrock: .providerOwnedAuthenticationState,
         .claude: .providerCLI,
+        .clinePass: .providerOwnedAuthenticationState,
         .codebuff: .providerOwnedAuthenticationState,
         .codex: .providerCLI,
+        .cursor: .providerCLI,
         .doubao: .providerCLI,
         .factory: .providerOwnedLocalSource,
         .gemini: .providerOwnedAuthenticationState,
@@ -277,7 +280,7 @@ enum WindowsProviderConfigurationCatalog {
     static let manualAPIProviderIDs: Set<WindowsProviderID> = [
         // Provider-specific by design: Declare proven manual routes and unsupported-platform explanations for the
         // unchanged Linux CLI.
-        .aiAnd, .alibaba, .amp, .azureOpenAI, .chutes, .claude, .codebuff, .copilot,
+        .aiAnd, .alibaba, .amp, .azureOpenAI, .chutes, .claude, .codebuff, .commandCode, .copilot,
         .deepgram, .deepInfra, .doubao, .elevenLabs, .factory, .fireworks, .groq, .ibmBob,
         .kilo, .kimi, .liteLLM, .llmProxy, .moonshot, .neuralwatt, .ollama, .openai,
         .openCodeGo, .openRouter, .poe, .sub2API, .synthetic, .venice, .warp, .xAI,
@@ -296,20 +299,18 @@ enum WindowsProviderConfigurationCatalog {
 
     static let unavailableProviders: [WindowsProviderID: WindowsUnavailableProviderInfo] = [
         .abacus: .init(
-            explanation: "The upstream Abacus integration is currently available only on macOS.",
+            explanation: "The upstream Abacus integration uses a browser session, which the Linux CLI does not accept.",
             resourceURL: "https://github.com/steipete/CodexBar/blob/main/docs/abacus.md"),
         .crof: .init(
             explanation: "Crof was removed from CodexBar after the service shut down.",
             resourceURL: "https://github.com/steipete/CodexBar/pull/3828",
             removedUpstream: true),
-        .devin: .init(
-            explanation: "The unchanged Linux CLI has no safe configuration route for Devin credentials.",
-            resourceURL: "https://github.com/steipete/CodexBar/blob/main/docs/devin.md"),
         .windsurf: .init(
             explanation: "The upstream Windsurf integration depends on macOS browser and local app data.",
             resourceURL: "https://github.com/steipete/CodexBar/blob/main/docs/windsurf.md"),
         .zed: .init(
-            explanation: "The upstream Zed integration reads its sign-in from macOS Keychain.",
+            explanation: "The upstream Zed integration reads its editor sign-in from macOS Keychain, and the Linux CLI "
+                + "does not accept its browser billing session.",
             resourceURL: "https://github.com/steipete/CodexBar/blob/main/docs/zed.md"),
     ]
 
@@ -347,6 +348,69 @@ enum WindowsProviderConfigurationCatalog {
             ["sk-cp-"],
             minimumSuffixLength: 1,
             rejectionMessage: "Enter a MiniMax Coding Plan key beginning with sk-cp-."))
+
+    private static let kimiRegion = WindowsProviderConfigurationField(
+        id: "region",
+        storage: .region,
+        label: "Region (optional)",
+        placeholder: "china or international",
+        guidance: "Leave blank for kimi.com accounts. Use international for kimi.ai accounts.",
+        style: .plainText,
+        required: false,
+        validation: .oneOf(["china", "international"]))
+
+    private static let notionWorkspace = WindowsProviderConfigurationField(
+        id: "workspaceID",
+        storage: .workspaceID,
+        label: "Workspace ID (optional)",
+        placeholder: "Notion workspace ID",
+        guidance: "Leave blank to use your first Business or Enterprise workspace. Set it if Notion asks for one.",
+        style: .plainText,
+        required: false,
+        validation: .nonempty)
+
+    private static var devinSchema: WindowsProviderConfigurationSchema {
+        WindowsProviderConfigurationSchema(
+            provider: .devin,
+            cliName: "devin",
+            credentialSets: [
+                .init(
+                    id: "bearer-token",
+                    label: "Bearer token",
+                    source: "web",
+                    acceptsManual: true,
+                    acceptsOpenCode: false,
+                    derivesManualCookieSource: true,
+                    fields: [
+                        .init(
+                            id: "cookieHeader",
+                            storage: .cookieHeader,
+                            label: "Bearer token",
+                            placeholder: "Bearer …",
+                            guidance: Self.browserSecurityNotice,
+                            style: .secureSingleLine,
+                            required: true,
+                            validation: .secret),
+                        .init(
+                            id: "workspaceID",
+                            storage: .workspaceID,
+                            label: "Organization",
+                            placeholder: "org-…",
+                            guidance: "Copy x-cog-org-id from the same request. A slug or organization URL also works.",
+                            style: .plainText,
+                            required: true,
+                            validation: .nonempty),
+                    ],
+                    captureInstructions: [
+                        "Sign in to app.devin.ai in Chrome and select your organization.",
+                        "Press F12, select Network, then open or reload the organization's Usage & Limits page.",
+                        "Filter by billing/quota/usage and select a successful request (status 200).",
+                        "Under Request Headers, copy the Authorization value, including Bearer, into Bearer token.",
+                        "From the same request, copy x-cog-org-id into Organization.",
+                    ],
+                    securityNotice: Self.browserSecurityNotice),
+            ])
+    }
 
     private static let openCodeWorkspace = WindowsProviderConfigurationField(
         id: "workspaceID",
@@ -463,11 +527,25 @@ enum WindowsProviderConfigurationCatalog {
                     style: .plainText,
                     required: true,
                     validation: .nonempty),
+                .init(
+                    id: "azureOpenAIAPIVersion",
+                    storage: .azureOpenAIAPIVersion,
+                    label: "API version (optional)",
+                    placeholder: "2024-10-21 or v1",
+                    guidance: "Leave blank for the default. Use v1 for the OpenAI-compatible endpoint.",
+                    style: .plainText,
+                    required: false,
+                    validation: .nonempty),
             ]),
         // Provider-specific by design: Mirror upstream credential field contracts and capture policies in the shared
         // Windows schema.
         Self.apiSchema(.chutes, "chutes"),
-        Self.apiSchema(.claude, "claude"),
+        Self.apiSchema(
+            .claude,
+            "claude",
+            additionalSets: [
+                Self.browserSet(site: "claude.ai", hosts: ["claude.ai"], requiredCookieNames: ["sessionKey"]),
+            ]),
         Self.apiSchema(.clawRouter, "clawrouter"),
         Self.apiSchema(.clinePass, "clinepass"),
         Self.apiSchema(.codebuff, "codebuff"),
@@ -496,6 +574,7 @@ enum WindowsProviderConfigurationCatalog {
             .deepSeek,
             "deepseek",
             secretTransport: .stagedTokenAccount),
+        Self.devinSchema,
         Self.apiSchema(.doubao, "doubao"),
         Self.apiSchema(.elevenLabs, "elevenlabs"),
         Self.apiSchema(.factory, "factory"),
@@ -511,7 +590,18 @@ enum WindowsProviderConfigurationCatalog {
         // unchanged CLI.
         Self.apiSchema(.ibmBob, "ibmbob"),
         Self.apiSchema(.kilo, "kilo"),
-        Self.apiSchema(.kimi, "kimi"),
+        Self.apiSchema(
+            .kimi,
+            "kimi",
+            companions: [Self.kimiRegion],
+            additionalSets: [
+                Self.browserSet(
+                    site: "kimi.com or kimi.ai",
+                    hosts: ["kimi.com", "www.kimi.com", "kimi.ai", "www.kimi.ai"],
+                    input: .opaqueSession(defaultCookieName: "kimi-auth", recognizedCookieNames: ["kimi-auth"]),
+                    requiredCookieNames: ["kimi-auth"],
+                    companions: [Self.kimiRegion]),
+            ]),
         Self.webSchema(
             .longCat,
             "longcat",
@@ -573,10 +663,7 @@ enum WindowsProviderConfigurationCatalog {
             set: Self.browserSet(
                 site: "admin.mistral.ai",
                 hosts: ["mistral.ai", "admin.mistral.ai", "auth.mistral.ai", "console.mistral.ai"],
-                requiredCookieNames: ["csrftoken"],
-                requiredCookieNamePrefixes: ["ory_session_"],
-                requiresAllCookieNames: true,
-                executionMode: .diagnose)),
+                requiredCookieNamePrefixes: ["ory_session_"])),
         // Provider-specific by design: Declare upstream API and OpenCode/Ollama session shapes for the generic staging
         // encoder.
         Self.apiSchema(.moonshot, "moonshot"),
@@ -748,8 +835,22 @@ enum WindowsProviderConfigurationCatalog {
                 site: "app.notion.com",
                 hosts: ["app.notion.com", "notion.so", "www.notion.so"],
                 requiredCookieNames: ["token_v2"],
+                companions: [Self.notionWorkspace],
                 executionMode: .diagnose)),
-        Self.apiSchema(.zai, "zai"),
+        Self.apiSchema(
+            .zai,
+            "zai",
+            companions: [
+                .init(
+                    id: "region",
+                    storage: .region,
+                    label: "Region (optional)",
+                    placeholder: "global or bigmodel-cn",
+                    guidance: "Leave blank for z.ai keys. Use bigmodel-cn for BigModel (open.bigmodel.cn) keys.",
+                    style: .plainText,
+                    required: false,
+                    validation: .oneOf(["global", "bigmodel-cn"])),
+            ]),
         Self.apiSchema(.zenMux, "zenmux"),
     ]
 

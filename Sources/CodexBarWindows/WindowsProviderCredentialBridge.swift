@@ -15,18 +15,30 @@ struct WindowsProviderCredentialBridge: Sendable {
         let credentialKind: CredentialKind
         let secretEnvironmentKey: String
         @ProcessEnvironment var additionalEnvironment: [String: String]
+        /// Non-secret companion values staged in the provider config, for settings upstream reads only from config.
+        let stagedCompanionValues: [String: String]
 
         init(
             _ authProviderID: String,
             kind: CredentialKind = .apiKey,
             secretEnvironmentKey: String,
-            additionalEnvironment: [String: String] = [:])
+            additionalEnvironment: [String: String] = [:],
+            stagedCompanionValues: [String: String] = [:])
         {
             self.authProviderID = authProviderID
             self.credentialKind = kind
             self.secretEnvironmentKey = secretEnvironmentKey
             self.additionalEnvironment = additionalEnvironment
+            self.stagedCompanionValues = stagedCompanionValues
         }
+    }
+
+    /// A matched OpenCode credential: the child-process environment plus non-secret staged config values.
+    struct Projection: Sendable, Equatable {
+        @ProcessEnvironment var environment: [String: String]
+        let companionValues: [String: String]
+
+        static let empty = Self(environment: [:], companionValues: [:])
     }
 
     struct Rule: Sendable {
@@ -74,8 +86,15 @@ struct WindowsProviderCredentialBridge: Sendable {
         for provider: WindowsProviderID,
         base: [String: String]) throws -> [String: String]
     {
+        try self.projection(for: provider, base: base).environment
+    }
+
+    func projection(
+        for provider: WindowsProviderID,
+        base: [String: String]) throws -> Projection
+    {
         guard let rule = self.rules[provider], let data = try self.authDataLoader(base) else {
-            return [:]
+            return .empty
         }
 
         let entries: [String: AuthEntry]
@@ -94,9 +113,9 @@ struct WindowsProviderCredentialBridge: Sendable {
             overrides["WSLENV"] = Self.mergedWSLEnvironment(
                 existing: Self.environmentValue(named: "WSLENV", in: base),
                 adding: Array(overrides.keys))
-            return overrides
+            return Projection(environment: overrides, companionValues: candidate.stagedCompanionValues)
         }
-        return [:]
+        return .empty
     }
 
     static func supports(_ provider: WindowsProviderID) -> Bool {
@@ -188,22 +207,24 @@ struct WindowsProviderCredentialBridge: Sendable {
         .init(
             provider: .zai,
             candidates: [
+                // Provider-specific by design: upstream reads the z.ai region only from config, and without
+                // bigmodel-cn it ignores BigModel keys such as ZHIPU_API_KEY.
                 .init(
                     "zai",
                     secretEnvironmentKey: "Z_AI_API_KEY",
-                    additionalEnvironment: ["Z_AI_REGION": "global"]),
+                    stagedCompanionValues: ["region": "global"]),
                 .init(
                     "zai-coding-plan",
                     secretEnvironmentKey: "Z_AI_API_KEY",
-                    additionalEnvironment: ["Z_AI_REGION": "global"]),
+                    stagedCompanionValues: ["region": "global"]),
                 .init(
                     "zhipuai",
                     secretEnvironmentKey: "ZHIPU_API_KEY",
-                    additionalEnvironment: ["Z_AI_REGION": "bigmodel-cn"]),
+                    stagedCompanionValues: ["region": "bigmodel-cn"]),
                 .init(
                     "zhipuai-coding-plan",
                     secretEnvironmentKey: "ZHIPU_API_KEY",
-                    additionalEnvironment: ["Z_AI_REGION": "bigmodel-cn"]),
+                    stagedCompanionValues: ["region": "bigmodel-cn"]),
             ]),
     ]
 

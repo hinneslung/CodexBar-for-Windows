@@ -6,7 +6,7 @@ import Testing
 @Suite("Windows final credential alignment", .serialized)
 struct WindowsFinalCredentialAlignmentTests {
     private static let diagnosticProviders: Set<WindowsProviderID> = [
-        .longCat, .manus, .mistral, .notion, .openCode, .perplexity, .stepFun,
+        .longCat, .manus, .notion, .openCode, .perplexity, .stepFun,
         .t3Chat, .mimo, .zoomMate,
     ]
 
@@ -14,11 +14,12 @@ struct WindowsFinalCredentialAlignmentTests {
     func `catalog method counts and aligned provider copy are exact`() throws {
         let schemas = WindowsProviderConfigurationCatalog.schemas
         let manualSets = schemas.flatMap(\.manualCredentialSets)
-        #expect(manualSets.count(where: { $0.id == "api-key" }) == 38)
-        #expect(manualSets.count(where: { $0.label == "Browser session" }) == 19)
+        #expect(manualSets.count(where: { $0.id == "api-key" }) == 39)
+        #expect(manualSets.count(where: { $0.label == "Browser session" }) == 21)
         #expect(manualSets.count(where: { $0.label == "Session token" }) == 1)
+        #expect(manualSets.count(where: { $0.label == "Bearer token" }) == 1)
 
-        for provider in [WindowsProviderID.clinePass, .deepSeek, .minimax] {
+        for provider in [WindowsProviderID.deepSeek, .minimax] {
             let schema = try #require(WindowsProviderConfigurationCatalog.byProvider[provider])
             #expect(
                 ["Automatic"] + schema.manualCredentialSets.map(\.label) == ["Automatic", "API key"])

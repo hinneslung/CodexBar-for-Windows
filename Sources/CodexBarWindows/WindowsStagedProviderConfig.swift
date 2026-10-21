@@ -133,6 +133,7 @@ enum WindowsStagedProviderConfig {
                     region: nil,
                     workspaceID: nil,
                     enterpriseHost: nil,
+                    azureOpenAIAPIVersion: nil,
                     tokenAccounts: nil,
                     codexActiveSource: CodexActiveSourcePayload(kind: "liveSystem", homePath: path),
                     codexProfileHomePaths: [path]),
@@ -168,6 +169,7 @@ enum WindowsStagedProviderConfig {
                     region: values[.region],
                     workspaceID: values[.workspaceID],
                     enterpriseHost: values[.enterpriseHost],
+                    azureOpenAIAPIVersion: values[.azureOpenAIAPIVersion],
                     tokenAccounts: tokenAccountToken.map(Self.ephemeralTokenAccounts),
                     codexActiveSource: nil,
                     codexProfileHomePaths: nil),
@@ -210,6 +212,8 @@ enum WindowsStagedProviderConfig {
         let region: String?
         let workspaceID: String?
         let enterpriseHost: String?
+        /// Upstream reads this provider-config extension key for Azure OpenAI only.
+        let azureOpenAIAPIVersion: String?
         let tokenAccounts: TokenAccountDataPayload?
         let codexActiveSource: CodexActiveSourcePayload?
         let codexProfileHomePaths: [String]?
