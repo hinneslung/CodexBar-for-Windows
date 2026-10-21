@@ -722,9 +722,9 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
 
         init(from decoder: Decoder) {
             let container = try? decoder.container(keyedBy: CodingKeys.self)
-            self.primary = (try? container?.decodeIfPresent(String.self, forKey: .primary)) ?? nil
-            self.secondary = (try? container?.decodeIfPresent(String.self, forKey: .secondary)) ?? nil
-            self.tertiary = (try? container?.decodeIfPresent(String.self, forKey: .tertiary)) ?? nil
+            self.primary = try? container?.decodeIfPresent(String.self, forKey: .primary)
+            self.secondary = try? container?.decodeIfPresent(String.self, forKey: .secondary)
+            self.tertiary = try? container?.decodeIfPresent(String.self, forKey: .tertiary)
         }
     }
 
