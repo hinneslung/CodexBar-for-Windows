@@ -387,7 +387,7 @@ enum WindowsProviderConfigurationCatalog {
                             storage: .cookieHeader,
                             label: "Bearer token",
                             placeholder: "Bearer …",
-                            guidance: Self.browserSecurityNotice,
+                            guidance: browserSecurityNotice,
                             style: .secureSingleLine,
                             required: true,
                             validation: .secret),
@@ -408,7 +408,7 @@ enum WindowsProviderConfigurationCatalog {
                         "Under Request Headers, copy the Authorization value, including Bearer, into Bearer token.",
                         "From the same request, copy x-cog-org-id into Organization.",
                     ],
-                    securityNotice: Self.browserSecurityNotice),
+                    securityNotice: browserSecurityNotice),
             ])
     }
 
