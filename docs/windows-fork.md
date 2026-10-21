@@ -33,7 +33,9 @@ read_when:
 3. Leave `Sources/CodexBarCLI` and `Sources/CodexBarCore` identical to that upstream release. The
    Windows CI job fails if they differ from the tag in `.github/windows-upstream-base`.
 4. Keep the fork's release workflow and Windows jobs when resolving `.github/workflows` conflicts.
-   Upstream's own release and release-policy workflows stay guarded to the original repository.
+   Upstream's macOS `release.yml` is deleted in the fork: it calls upstream's reusable release workflow,
+   which the fork replaces, so GitHub would reject it on every push. Resolve its modify/delete conflicts
+   by deleting it again. Upstream's release-policy workflow stays guarded to the original repository.
 5. Run the Windows tests and native x64/ARM64 CI, verify the packages, and visually check the packaged
    app. Fix any failures that would block a release, then open a PR.
 6. After the required checks pass on the PR's head commit, confirm `windows-native-app` has not moved and
