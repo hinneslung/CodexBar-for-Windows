@@ -15,9 +15,9 @@ read_when:
   `windows/<feature>` branch from it, then open a PR back to this fork's `windows-native-app`.
   Do not target `main` or the original CodexBar repository.
 - Keep each PR focused on one change. Squash-merge it after all required checks pass, except
-  upstream-update PRs, which use a merge commit.
+  upstream-update PRs, which land by fast-forward (see below).
 - Keep deletion protection enabled for `main` and `windows-native-app`. Administrator bypass is
-  reserved for repository maintenance, not ordinary PRs or failing builds.
+  reserved for repository maintenance, such as landing upstream updates, not ordinary PRs or failing builds.
 
 ## Upstream updates
 
@@ -35,9 +35,11 @@ read_when:
 4. Keep the fork's release workflow and Windows jobs when resolving `.github/workflows` conflicts.
    Upstream's own release and release-policy workflows stay guarded to the original repository.
 5. Run the Windows tests and native x64/ARM64 CI, verify the packages, and visually check the packaged
-   app. Fix any failures that would block a release, then open a PR. Merge it with a merge commit,
-   never a squash merge: squashing drops the upstream parent, so the next update would conflict
-   across every upstream change again.
+   app. Fix any failures that would block a release, then open a PR.
+6. After the required checks pass on the PR's head commit, confirm `windows-native-app` has not moved and
+   fast-forward it to that commit (`git push fork <head-sha>:refs/heads/windows-native-app`). GitHub then
+   marks the PR as merged. Never squash-merge an upstream update: squashing drops the upstream parent, so
+   the next update would conflict across every upstream change again.
 
 - The mirror sync workflow never merges into or pushes the Windows branch.
 

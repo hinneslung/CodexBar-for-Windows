@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.78.0-windows.1 — 2026-10-21
+
+- Update to upstream CodexBar v0.78.0 and bundle its Linux CLI. Upstream changes since v0.56.8 include more reliable Claude, OpenRouter, and OpenCode Go fetching, plus security hardening of the CLI.
+- Show each provider's own window names from upstream, such as "5-hour" or "Premium", instead of generic Session, Weekly, and Monthly labels.
+- Keep Gemini working in Automatic mode: it now always uses its API source, because the new upstream CLI refuses Gemini's plain Automatic route on Linux.
+- Accept OpenCode Console session cookies (`__Host-console_session`) for OpenCode and OpenCode Go browser sessions.
+- Mark Crof as removed: upstream dropped it after the service shut down. Existing Crof profiles are disabled and no longer refreshed.
+- Include the bundled CLI's third-party notices in the Windows packages.
+
 ## 0.56.8-windows.6 — 2026-10-20
 
 - Load Claude usage from its OAuth sign-in first in Automatic mode, falling back to the interactive Claude CLI only when OAuth is unavailable. Claude now loads in seconds instead of 24–49s and no longer reports "Automatic took too long to respond".
