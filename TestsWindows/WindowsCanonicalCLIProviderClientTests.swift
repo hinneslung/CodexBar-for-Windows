@@ -70,6 +70,33 @@ struct WindowsCanonicalCLIProviderClientTests {
         }
     }
 
+    @Test
+    func `provider cost balances show as a remaining amount without overriding credits`() throws {
+        let window = #""primary":{"usedPercent":10}"#
+        let cost = { (fields: String) in #","providerCost":{"used":0,"limit":0,\#(fields)}"# }
+        let usd = cost(#""currencyCode":"USD","balance":12.5"#)
+        let euro = cost(#""currencyCode":"EUR","balance":-3"#)
+        let unavailable = cost(#""currencyCode":"USD","balance":5,"balanceIsUnavailable":true"#)
+        #expect(try Self.decodeBalance(usage: window + usd) == "$12.50 remaining")
+        #expect(try Self.decodeBalance(usage: window + euro) == "-3.00 EUR remaining")
+        #expect(try Self.decodeBalance(usage: window + unavailable) == nil)
+        #expect(try Self.decodeBalance(usage: window + cost(#""currencyCode":"USD""#)) == nil)
+        #expect(try Self.decodeBalance(usage: window + #","providerCost":"oops""#) == nil)
+        #expect(
+            try Self.decodeBalance(
+                usage: window + cost(#""currencyCode":"USD","balance":5"#),
+                credits: #","credits":{"remaining":7,"events":[]}"#)
+                == "7 credits remaining")
+    }
+
+    private static func decodeBalance(usage: String, credits: String = "") throws -> String? {
+        let payload = #"[{"provider":"grok","usage":{\#(usage)}\#(credits)}]"#
+        return try WindowsCanonicalCLIProviderClient.decode(
+            data: Data(payload.utf8),
+            requestedProvider: WindowsProviderID("grok"),
+            sourceText: "WSL CLI · Ubuntu").balanceText
+    }
+
     private static func decodeWindows(usage: String, labels: String?) throws -> [String] {
         let labelsField = labels.map { #","rateWindowLabels":\#($0)"# } ?? ""
         let payload = #"[{"provider":"synthetic","usage":{\#(usage)}\#(labelsField)}]"#

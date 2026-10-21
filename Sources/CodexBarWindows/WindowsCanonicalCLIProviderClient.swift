@@ -401,6 +401,13 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
         } else {
             planText = identityText
         }
+        // A prepaid balance reported with provider costs, such as Grok's purchased credits. Spend and limits in the
+        // same structure are not balances and stay unshown.
+        if balanceText == nil, let cost = payload.usage?.providerCost, cost.balanceIsUnavailable != true,
+           let balance = cost.balance
+        {
+            balanceText = "\(Self.currencyAmount(balance, currencyCode: cost.currencyCode)) remaining"
+        }
         let accountText = Self.normalized(payload.account)
         let updatedAt = payload.usage?.updatedAt ?? payload.credits?.updatedAt ?? Date()
         return WindowsProviderSnapshot(
@@ -638,6 +645,14 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
         return String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), value)
     }
 
+    private static func currencyAmount(_ value: Double, currencyCode: String?) -> String {
+        let code = currencyCode?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
+        let magnitude = String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), abs(value))
+        let sign = value < 0 ? "-" : ""
+        if code.isEmpty || code == "USD" { return "\(sign)$\(magnitude)" }
+        return "\(sign)\(magnitude) \(code)"
+    }
+
     private static func identityBalance(_ value: String) -> String? {
         let prefixes = ["Balance:", "Credits:", "Points:"]
         let balance: String
@@ -736,6 +751,7 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
         let updatedAt: Date?
         let identity: Identity?
         let codexResetCredits: CodexResetCredits?
+        let providerCost: ProviderCost?
 
         private enum CodingKeys: String, CodingKey {
             case primary
@@ -745,6 +761,7 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
             case updatedAt
             case identity
             case codexResetCredits
+            case providerCost
         }
 
         init(from decoder: Decoder) throws {
@@ -764,7 +781,15 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
             } catch {
                 self.codexResetCredits = nil
             }
+            // Optional presentation data: a malformed cost block must not discard the usage reading.
+            self.providerCost = try? container.decodeIfPresent(ProviderCost.self, forKey: .providerCost)
         }
+    }
+
+    private struct ProviderCost: Decodable {
+        let currencyCode: String?
+        let balance: Double?
+        let balanceIsUnavailable: Bool?
     }
 
     private struct CodexResetCredits: Decodable {
