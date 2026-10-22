@@ -248,7 +248,7 @@ final class WindowsTrayApplication {
             if UINT_PTR(wParam) == Self.refreshCompletionTimerID {
                 self.consumeRefreshResult()
             } else if UINT_PTR(wParam) == Self.refreshTimerID {
-                self.requestRefresh()
+                self.requestRefresh(.scheduled)
             }
             return 0
         case Self.refreshCompletedMessage:
@@ -455,9 +455,9 @@ final class WindowsTrayApplication {
 }
 
 extension WindowsTrayApplication {
-    func requestRefresh() {
+    func requestRefresh(_ trigger: WindowsRefreshGate.Trigger = .requested) {
         guard let messageWindow = self.messageWindow else { return }
-        guard self.refreshGate.request() else { return }
+        guard self.refreshGate.request(trigger) else { return }
         self.presentation = WindowsDashboardPresentation.make(
             snapshots: self.snapshotsForRefreshStart(),
             refreshedAt: self.presentation.refreshedAt ?? Date(),
@@ -699,18 +699,18 @@ extension WindowsTrayApplication {
         if let messageWindow = self.messageWindow {
             _ = KillTimer(messageWindow, Self.refreshCompletionTimerID)
         }
-        let completion = self.refreshGate.complete()
-        if result.generation != self.refreshGeneration {
-            if completion == .restart { self.requestRefresh() }
-            return
-        }
-        if completion == .restart {
-            self.requestRefresh()
+        let completion = self.refreshGate.complete(resultIsCurrent: result.generation == self.refreshGeneration)
+        guard completion.publishes else {
+            if completion.restarts { self.requestRefresh() }
             return
         }
         if result.snapshots.contains(where: \.discardsRefreshResult) {
             self.requestRefresh()
             return
+        }
+        // The queued refresh starts after this result is shown, so it builds on the newest readings.
+        defer {
+            if completion.restarts { self.requestRefresh() }
         }
         if result.snapshots.isEmpty {
             self.lastPublishedSnapshots.removeAll()
@@ -735,7 +735,8 @@ extension WindowsTrayApplication {
             self.popup.update(self.presentation)
             self.updateTrayTooltip()
         }
-        if publication.requiresRefresh {
+        // A queued restart already refreshes again; requesting here as well would queue a second one.
+        if publication.requiresRefresh, !completion.restarts {
             self.requestRefresh()
         }
     }
