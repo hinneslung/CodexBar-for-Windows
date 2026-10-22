@@ -369,6 +369,8 @@ enum WindowsProviderConfigurationCatalog {
         required: false,
         validation: .nonempty)
 
+    // Provider-specific by design: Devin's Linux route reads a bearer token from the manual cookie header and the
+    // organization from workspaceID, unlike the shared browser-cookie schema.
     private static var devinSchema: WindowsProviderConfigurationSchema {
         WindowsProviderConfigurationSchema(
             provider: .devin,
