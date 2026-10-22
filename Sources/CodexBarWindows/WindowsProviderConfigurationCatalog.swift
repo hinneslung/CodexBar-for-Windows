@@ -579,6 +579,8 @@ enum WindowsProviderConfigurationCatalog {
         Self.apiSchema(.elevenLabs, "elevenlabs"),
         Self.apiSchema(.factory, "factory"),
         Self.apiSchema(.fireworks, "fireworks"),
+        // Provider-specific by design: Declare upstream API, region and browser credential contracts for the generic
+        // staging encoder.
         Self.apiSchema(.groq, "groqcloud"),
         Self.apiSchema(
             .grok,
@@ -667,6 +669,8 @@ enum WindowsProviderConfigurationCatalog {
         // Provider-specific by design: Declare upstream API and OpenCode/Ollama session shapes for the generic staging
         // encoder.
         Self.apiSchema(.moonshot, "moonshot"),
+        // Provider-specific by design: Continue the upstream API and OpenCode session contracts consumed by the
+        // generic staging encoder.
         Self.apiSchema(.neuralwatt, "neuralwatt"),
         Self.apiSchema(
             .ollama,
