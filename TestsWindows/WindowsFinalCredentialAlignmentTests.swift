@@ -14,10 +14,11 @@ struct WindowsFinalCredentialAlignmentTests {
     func `catalog method counts and aligned provider copy are exact`() throws {
         let schemas = WindowsProviderConfigurationCatalog.schemas
         let manualSets = schemas.flatMap(\.manualCredentialSets)
-        #expect(manualSets.count(where: { $0.id == "api-key" }) == 39)
+        #expect(manualSets.count(where: { $0.id == "api-key" }) == 52)
         #expect(manualSets.count(where: { $0.label == "Browser session" }) == 21)
         #expect(manualSets.count(where: { $0.label == "Session token" }) == 1)
         #expect(manualSets.count(where: { $0.label == "Bearer token" }) == 1)
+        #expect(manualSets.count(where: { $0.label == "Access token" }) == 1)
 
         for provider in [WindowsProviderID.deepSeek, .minimax] {
             let schema = try #require(WindowsProviderConfigurationCatalog.byProvider[provider])

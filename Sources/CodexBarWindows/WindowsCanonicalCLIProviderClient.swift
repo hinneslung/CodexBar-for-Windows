@@ -409,6 +409,17 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
             let amount = Self.currencyAmount(balance, currencyCode: cost.currencyCode)
             balanceText = cost.balanceIsWorkspace == true ? "\(amount) workspace balance" : "\(amount) remaining"
         }
+        var detailSections = Self.detailSections(payload.usage?.details ?? [])
+        // Balance-only providers report their balance as a detail row. Show it as the balance, once.
+        if balanceText == nil {
+            let extracted = WindowsProviderDetailSection.extractingBalance(
+                from: detailSections,
+                labels: WindowsProviderCatalog.byID[requestedProvider]?.balanceDetailLabels ?? [])
+            if let balance = extracted.balance {
+                balanceText = "\(balance) remaining"
+                detailSections = extracted.sections
+            }
+        }
         let accountText = Self.normalized(payload.account)
         let updatedAt = payload.usage?.updatedAt ?? payload.credits?.updatedAt ?? Date()
         return WindowsProviderSnapshot(
@@ -429,7 +440,8 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
                         guard credit.status == "available" else { return }
                         expiries.append(credit.expiresAt)
                     })
-            } : nil)
+            } : nil,
+            detailSections: detailSections)
     }
 
     static func decode(
@@ -654,6 +666,23 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
         return "\(sign)\(magnitude) \(code)"
     }
 
+    /// Upstream caps details at 8 sections of 24 rows. Rows without a label or value are skipped.
+    private static func detailSections(_ sections: [DetailSection]) -> [WindowsProviderDetailSection] {
+        sections.prefix(8).compactMap { section in
+            let rows = section.rows.prefix(24).compactMap { row -> WindowsProviderDetailSection.Row? in
+                guard let label = Self.normalized(row.label), let value = Self.normalized(row.value) else {
+                    return nil
+                }
+                return WindowsProviderDetailSection.Row(
+                    label: label,
+                    value: value,
+                    secondaryValue: Self.normalized(row.secondaryValue))
+            }
+            guard !rows.isEmpty else { return nil }
+            return WindowsProviderDetailSection(title: Self.normalized(section.title), rows: rows)
+        }
+    }
+
     private static func identityBalance(_ value: String) -> String? {
         let prefixes = ["Balance:", "Credits:", "Points:"]
         let balance: String
@@ -753,6 +782,7 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
         let identity: Identity?
         let codexResetCredits: CodexResetCredits?
         let providerCost: ProviderCost?
+        let details: [DetailSection]?
 
         private enum CodingKeys: String, CodingKey {
             case primary
@@ -763,6 +793,7 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
             case identity
             case codexResetCredits
             case providerCost
+            case details
         }
 
         init(from decoder: Decoder) throws {
@@ -784,6 +815,43 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
             }
             // Optional presentation data: a malformed cost block must not discard the usage reading.
             self.providerCost = try? container.decodeIfPresent(ProviderCost.self, forKey: .providerCost)
+            self.details = try? container.decodeIfPresent([DetailSection].self, forKey: .details)
+        }
+    }
+
+    /// Optional presentation data: malformed fields become absent instead of failing the section or reading.
+    private struct DetailSection: Decodable {
+        let title: String?
+        let rows: [DetailRow]
+
+        private enum CodingKeys: String, CodingKey {
+            case title
+            case rows
+        }
+
+        init(from decoder: Decoder) {
+            let container = try? decoder.container(keyedBy: CodingKeys.self)
+            self.title = try? container?.decodeIfPresent(String.self, forKey: .title)
+            self.rows = (try? container?.decodeIfPresent([DetailRow].self, forKey: .rows)) ?? []
+        }
+    }
+
+    private struct DetailRow: Decodable {
+        let label: String?
+        let value: String?
+        let secondaryValue: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case label
+            case value
+            case secondaryValue
+        }
+
+        init(from decoder: Decoder) {
+            let container = try? decoder.container(keyedBy: CodingKeys.self)
+            self.label = try? container?.decodeIfPresent(String.self, forKey: .label)
+            self.value = try? container?.decodeIfPresent(String.self, forKey: .value)
+            self.secondaryValue = try? container?.decodeIfPresent(String.self, forKey: .secondaryValue)
         }
     }
 

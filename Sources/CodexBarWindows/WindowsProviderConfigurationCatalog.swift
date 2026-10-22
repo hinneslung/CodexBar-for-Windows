@@ -9,6 +9,7 @@ struct WindowsProviderConfigurationField: Sendable, Equatable {
         case workspaceID
         case enterpriseHost
         case azureOpenAIAPIVersion
+        case vercelAccessToken
     }
 
     enum Style: Sendable, Equatable {
@@ -27,6 +28,7 @@ struct WindowsProviderConfigurationField: Sendable, Equatable {
         case sub2APIURL
         case xAITeamID
         case openCodeWorkspaceID
+        case vercelTeamID
         case oneOf([String])
     }
 
@@ -233,6 +235,8 @@ enum WindowsProviderConfigurationCatalog {
         .factory: .providerOwnedLocalSource,
         .gemini: .providerOwnedAuthenticationState,
         .grok: .providerCLI,
+        // Hugging Face also reads the token that `hf auth login` saves in WSL.
+        .huggingFace: .providerOwnedAuthenticationState,
         .jetBrains: .providerOwnedAuthenticationState,
         .kilo: .providerCLI,
         .kimi: .providerOwnedAuthenticationState,
@@ -285,6 +289,8 @@ enum WindowsProviderConfigurationCatalog {
         .kilo, .kimi, .liteLLM, .llmProxy, .moonshot, .neuralwatt, .ollama, .openai,
         .openCodeGo, .openRouter, .poe, .sub2API, .synthetic, .venice, .warp, .xAI,
         .zai, .zenMux, .clawRouter, .clinePass, .deepSeek, .minimax,
+        .huggingFace, .v0, .devPass, .atlasCloud, .vercel, .xKiro, .tavily, .linkup, .aerostack,
+        .sailResearch, .sofya, .fal, .munito,
     ]
 
     static let automaticSourceRoutes: [WindowsProviderID: WindowsAutomaticSourceRoute] = [
@@ -326,7 +332,7 @@ enum WindowsProviderConfigurationCatalog {
         self.unavailableInfo(for: provider) == nil
     }
 
-    private static let apiKey = WindowsProviderConfigurationField(
+    static let apiKey = WindowsProviderConfigurationField(
         id: "apiKey",
         storage: .apiKey,
         label: "API key",
@@ -858,7 +864,7 @@ enum WindowsProviderConfigurationCatalog {
                     validation: .oneOf(["global", "bigmodel-cn"])),
             ]),
         Self.apiSchema(.zenMux, "zenmux"),
-    ]
+    ] + Self.pluginProviderSchemas
 
     static let byProvider: [WindowsProviderID: WindowsProviderConfigurationSchema] =
         Dictionary(uniqueKeysWithValues: Self.schemas.map { ($0.provider, $0) })
@@ -1003,7 +1009,7 @@ enum WindowsProviderConfigurationCatalog {
         }
     }
 
-    private static func apiSchema(
+    static func apiSchema(
         _ provider: WindowsProviderID,
         _ cliName: String,
         companions: [WindowsProviderConfigurationField] = [],
@@ -1098,6 +1104,13 @@ enum WindowsProviderConfigurationValidator {
             return !value.contains("/") && value != "." && value != ".."
         case .openCodeWorkspaceID:
             return value.hasPrefix("wrk_") && !value.contains(where: \.isNewline)
+        case .vercelTeamID:
+            // Mirrors the upstream budget plugin's team check.
+            return value.utf8.count <= 128
+                && value.unicodeScalars.allSatisfy {
+                    ("a"..."z").contains($0) || ("A"..."Z").contains($0) || ("0"..."9").contains($0)
+                        || $0 == "_" || $0 == "-"
+                }
         case let .oneOf(values):
             return values.contains(value)
         }
