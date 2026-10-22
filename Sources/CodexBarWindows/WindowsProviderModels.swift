@@ -42,11 +42,6 @@ struct WindowsProviderDetailSection: Equatable, Sendable {
     let title: String?
     let rows: [Row]
 
-    init(title: String?, rows: [Row]) {
-        self.title = title
-        self.rows = rows
-    }
-
     /// Removes the first row whose label is one of `labels` and whose value contains a digit, returning that value.
     /// Sections left without rows are dropped, so a balance shown elsewhere is not repeated in the details.
     static func extractingBalance(

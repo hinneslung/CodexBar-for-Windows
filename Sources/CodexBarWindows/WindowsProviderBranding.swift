@@ -54,7 +54,7 @@ enum WindowsProviderBranding {
             return WindowsProviderLogoReference(
                 provider: provider,
                 upstreamResourceName: "ProviderIcon-fallback",
-                atlasIndex: Self.fallbackAtlasIndex,
+                atlasIndex: self.fallbackAtlasIndex,
                 usesFallback: true)
         }
         return WindowsProviderLogoReference(
