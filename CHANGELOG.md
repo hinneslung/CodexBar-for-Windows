@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.78.0-windows.4 — 2026-10-22
+
+- Add providers that need a key plus a workspace or address: Exa, FLORA, Cosmic AI, GitKraken AI, Bifrost, Aixy, and Charm Hyper (API key or browser session).
+- Add browser-session providers: Claude Platform, Replicate, Raycast, TypeSafe, Parallel, X API, LithosAI, TinyApi, and Muse (muse.ai).
+- Add CodeRabbit, Nous Portal, and Muse Code, which use their own sign-in inside WSL.
+- List Helmcode, Langdock, and WorkBuddy as unavailable: the Linux CLI cannot run their browser routes.
+
 ## 0.78.0-windows.3 — 2026-10-22
 
 - Add 13 providers that the bundled v0.78.0 CLI supports with an API key: Hugging Face, v0, DevPass, Atlas Cloud, Vercel AI Gateway, xKiro, Tavily, Linkup, Aerostack, Sail Research, Sofya, fal, and Munito. v0 accepts an optional scope, and Vercel accepts either an AI Gateway key or an access token with a team ID.
