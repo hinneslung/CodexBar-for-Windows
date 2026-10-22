@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.78.0-windows.2 — 2026-10-22
+
+- Expose more of what the bundled v0.78.0 CLI supports for existing providers: a Claude browser session, Devin with a bearer token and organization, a Kimi browser session and region, an Azure OpenAI API version, and an optional Notion workspace ID.
+- Accept Mistral browser sessions with only the `ory_session_*` cookie, and enable Command Code's saved API key.
+- Fix OpenCode BigModel (`zhipuai`) keys for z.ai, which never worked; saved z.ai keys can also choose a region.
+- Show purchased credits as a balance for providers that report only a balance, such as Grok.
+- Use Cursor's `cursor-agent` sign-in in WSL and Cline's own sign-in state in Automatic mode.
+
 ## 0.78.0-windows.1 — 2026-10-21
 
 - Update to upstream CodexBar v0.78.0 and bundle its Linux CLI. Upstream changes since v0.56.8 include more reliable Claude, OpenRouter, and OpenCode Go fetching, plus security hardening of the CLI.
