@@ -335,6 +335,7 @@ enum WindowsProviderConfigurationCatalog {
             explanation: "Crof was removed from CodexBar after the service shut down.",
             resourceURL: "https://github.com/steipete/CodexBar/pull/3828",
             removedUpstream: true),
+        // Provider-specific by design: Continue the unsupported-route explanations for the Linux CLI.
         .windsurf: .init(
             explanation: "The upstream Windsurf integration depends on macOS browser and local app data.",
             resourceURL: "https://github.com/steipete/CodexBar/blob/main/docs/windsurf.md"),

@@ -96,6 +96,7 @@ enum WindowsProviderCatalog {
         .init(id: .moonshot, displayName: "Moonshot"),
         .init(id: .amp, displayName: "Amp"),
         .init(id: .t3Chat, displayName: "T3 Chat"),
+        // Provider-specific by design: Mirror upstream provider IDs, names and order for Windows menus.
         .init(id: .langdock, displayName: "Langdock"),
         // Provider-specific by design: Continue the upstream registry mirror used by Windows menus and configuration
         // decoding.
@@ -138,6 +139,7 @@ enum WindowsProviderCatalog {
         .init(id: .clawRouter, displayName: "ClawRouter"),
         .init(id: .longCat, displayName: "LongCat"),
         .init(id: .sub2API, displayName: "Sub2API"),
+        // Provider-specific by design: Continue the upstream registry mirror in upstream order.
         .init(id: .wayfinder, displayName: "Wayfinder"),
         .init(id: .zenMux, displayName: "ZenMux"),
         .init(id: .aiAnd, displayName: "ai&"),

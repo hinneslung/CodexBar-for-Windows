@@ -49,6 +49,7 @@ extension WindowsProviderConfigurationCatalog {
                     site: "replicate.com",
                     hosts: ["replicate.com", "www.replicate.com"],
                     requiredCookieNames: ["sessionid"])),
+            // Provider-specific by design: Each browser session names the host and cookies upstream requires.
             webSchema(
                 .raycast,
                 "raycast",
@@ -116,79 +117,65 @@ extension WindowsProviderConfigurationCatalog {
         placeholder: "Paste virtual key",
         guidance: "The Bifrost virtual key whose quota to show.")
 
-    private static let exaKeyID = Self.companion(
+    private static let exaKeyID = WindowsProviderConfigurationField(
         id: "workspaceID",
         storage: .workspaceID,
         label: "API key ID",
         placeholder: "ID of the API key to report on",
         guidance: "The ID of the API key whose usage to show, not the service key.",
+        style: .plainText,
         required: true,
         validation: .pathSegment)
 
-    private static let floraWorkspace = Self.companion(
+    private static let floraWorkspace = WindowsProviderConfigurationField(
         id: "workspaceID",
         storage: .workspaceID,
         label: "Workspace ID",
         placeholder: "ws_…",
         guidance: nil,
+        style: .plainText,
         required: true,
         validation: .floraWorkspaceID)
 
-    private static let cosmicProject = Self.companion(
+    private static let cosmicProject = WindowsProviderConfigurationField(
         id: "workspaceID",
         storage: .workspaceID,
         label: "Project ID",
         placeholder: "Cosmic project ID",
         guidance: nil,
+        style: .plainText,
         required: true,
         validation: .nonempty)
 
-    private static let gitKrakenOrganization = Self.companion(
+    private static let gitKrakenOrganization = WindowsProviderConfigurationField(
         id: "workspaceID",
         storage: .workspaceID,
         label: "Organization ID (optional)",
         placeholder: "GitKraken organization ID",
         guidance: "Leave blank for your default organization.",
+        style: .plainText,
         required: false,
         validation: .printableASCII(maximumLength: 256))
 
-    private static let bifrostBaseURL = Self.companion(
+    private static let bifrostBaseURL = WindowsProviderConfigurationField(
         id: "enterpriseHost",
         storage: .enterpriseHost,
         label: "Base URL",
         placeholder: "https://bifrost.example.test",
         guidance: "HTTPS, or HTTP on a local or private network.",
+        style: .plainText,
         required: true,
         validation: .privateNetworkHTTPURL)
 
-    private static let aixyBaseURL = Self.companion(
+    private static let aixyBaseURL = WindowsProviderConfigurationField(
         id: "enterpriseHost",
         storage: .enterpriseHost,
         label: "Base URL (optional)",
         placeholder: "https://api.aixy-gateway.com",
         guidance: "Leave blank for the hosted gateway.",
+        style: .plainText,
         required: false,
         validation: .privateNetworkBaseURL)
-
-    private static func companion(
-        id: String,
-        storage: WindowsProviderConfigurationField.Storage,
-        label: String,
-        placeholder: String,
-        guidance: String?,
-        required: Bool,
-        validation: WindowsProviderConfigurationField.Validation) -> WindowsProviderConfigurationField
-    {
-        WindowsProviderConfigurationField(
-            id: id,
-            storage: storage,
-            label: label,
-            placeholder: placeholder,
-            guidance: guidance,
-            style: .plainText,
-            required: required,
-            validation: validation)
-    }
 
     /// Provider-specific by design: Key labels and guidance for upstream plugin providers whose key is not a plain API
     /// key, mirroring each upstream provider guide.
