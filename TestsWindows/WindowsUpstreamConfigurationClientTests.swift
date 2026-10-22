@@ -29,6 +29,9 @@ struct WindowsUpstreamConfigurationClientTests {
             "qwencloud=qwen-cloud", "sakana=sakana", "sub2api=sub2api",
             "stepfun=stepfun", "synthetic=synthetic", "t3chat=t3chat", "venice=venice",
             "warp=warp", "xai=xai", "zai=zai", "zenmux=zenmux", "zoommate=zoommate",
+            "huggingface=huggingface", "v0=v0", "devpass=devpass", "atlascloud=atlascloud",
+            "vercel=vercel", "xkiro=xkiro", "tavily=tavily", "linkup=linkup", "aerostack=aerostack",
+            "sailresearch=sailresearch", "sofya=sofya", "fal=fal", "munito=munito",
         ].sorted()
         #expect(actual == expected)
 
@@ -38,7 +41,8 @@ struct WindowsUpstreamConfigurationClientTests {
             "elevenlabs", "factory", "fireworks", "groq", "ibmbob", "kilo", "kimi", "litellm",
             "llmproxy", "minimax", "moonshot", "neuralwatt", "ollama", "openai", "opencodego",
             "openrouter", "poe", "sub2api", "synthetic", "venice", "warp", "xai", "zai",
-            "zenmux",
+            "zenmux", "huggingface", "v0", "devpass", "atlascloud", "vercel", "xkiro", "tavily",
+            "linkup", "aerostack", "sailresearch", "sofya", "fal", "munito",
         ]
         #expect(
             Set(WindowsProviderConfigurationCatalog.manualAPIProviderIDs.map(\.rawValue))
@@ -83,11 +87,11 @@ struct WindowsUpstreamConfigurationClientTests {
         let catalogProviders = Set(WindowsProviderCatalog.entries.map(\.id))
         let supportedProviders = Set(WindowsProviderConfigurationCatalog.schemas.map(\.provider))
             .union(WindowsProviderConfigurationCatalog.providerAppOrCLIProviderIDs)
-        #expect(catalogProviders.count == 69)
-        #expect(supportedProviders.count == 65)
-        #expect(WindowsProviderConfigurationCatalog.manualAPIProviderIDs.count == 39)
+        #expect(catalogProviders.count == 82)
+        #expect(supportedProviders.count == 78)
+        #expect(WindowsProviderConfigurationCatalog.manualAPIProviderIDs.count == 52)
         #expect(WindowsProviderCredentialBridge.defaultRules.count == 19)
-        #expect(WindowsProviderConfigurationCatalog.providerAppOrCLIProviderIDs.count == 19)
+        #expect(WindowsProviderConfigurationCatalog.providerAppOrCLIProviderIDs.count == 20)
         #expect(WindowsProviderConfigurationCatalog.unavailableProviderIDs.count == 4)
 
         let automaticDiagnosticProviders = Set(

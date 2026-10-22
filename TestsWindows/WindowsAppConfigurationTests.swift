@@ -30,6 +30,10 @@ final class WindowsAppConfigurationTests: XCTestCase {
             ("sub2api", "Sub2API"), ("wayfinder", "Wayfinder"), ("zenmux", "ZenMux"),
             ("aiand", "ai&"), ("zoommate", "ZoomMate"), ("xai", "xAI"),
             ("notion", "Notion AI"), ("ibmbob", "IBM Bob"),
+            ("huggingface", "Hugging Face"), ("v0", "v0"), ("devpass", "DevPass"),
+            ("atlascloud", "Atlas Cloud"), ("vercel", "Vercel AI Gateway"), ("xkiro", "xKiro"),
+            ("tavily", "Tavily"), ("linkup", "Linkup"), ("aerostack", "Aerostack"),
+            ("sailresearch", "Sail Research"), ("sofya", "Sofya"), ("fal", "fal"), ("munito", "Munito"),
         ]
 
         XCTAssertEqual(WindowsProviderCatalog.entries.map(\.id.rawValue), expected.map(\.0))
@@ -39,7 +43,7 @@ final class WindowsAppConfigurationTests: XCTestCase {
             Set(WindowsProviderID.supportedProviders),
             Set(WindowsProviderCatalog.entries.map(\.id))
                 .subtracting(WindowsProviderConfigurationCatalog.unavailableProviderIDs))
-        XCTAssertEqual(WindowsProviderID.supportedProviders.count, 65)
+        XCTAssertEqual(WindowsProviderID.supportedProviders.count, 78)
     }
 
     func test_mergingDisablesProfilesOfUnavailableProviders() {

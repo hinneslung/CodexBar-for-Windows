@@ -842,6 +842,25 @@ final class WindowsPopupWindow {
             self.drawLabelValue(dc: dc, client: client, y: y, label: "Balance", value: row.balanceText)
             y += self.scaled(34)
         }
+        for section in row.detailSections {
+            self.drawRule(dc: dc, client: client, y: y)
+            y += self.scaled(WindowsProviderDetailLayout.sectionTopPadding)
+            if let title = section.title {
+                WindowsDashboardDrawing.text(
+                    title,
+                    dc: dc,
+                    rect: RECT(left: inset, top: y, right: client.right - inset, bottom: y + self.scaled(22)),
+                    color: WindowsDashboardPalette.primaryText,
+                    font: self.secondaryFont,
+                    format: UINT(DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS))
+                y += self.scaled(WindowsProviderDetailLayout.rowHeight)
+            }
+            for detail in section.rows {
+                self.drawDetailRow(dc: dc, client: client, y: y, row: detail)
+                y += self.scaled(WindowsProviderDetailLayout.rowHeight)
+            }
+            y += self.scaled(WindowsProviderDetailLayout.sectionBottomPadding)
+        }
         self.drawRule(dc: dc, client: client, y: y)
         y += self.scaled(10)
         let sourceValue =
@@ -2725,6 +2744,40 @@ final class WindowsPopupWindow {
             format: UINT(DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS))
     }
 
+    /// A provider detail row: the value is right-aligned at its measured width (at most 55% of the row), and the
+    /// label takes the remaining space. Both truncate with an ellipsis.
+    private func drawDetailRow(dc: HDC?, client: RECT, y: Int32, row: WindowsProviderDetailSection.Row) {
+        let inset = self.scaled(Metrics.horizontalInset)
+        let available = client.right - 2 * inset
+        let value = row.displayValue
+        var valueWidth = available * 55 / 100
+        if let dc, let secondaryFont = self.secondaryFont, let previousFont = SelectObject(dc, secondaryFont) {
+            defer { _ = SelectObject(dc, previousFont) }
+            var measured = RECT()
+            let result = WindowsWideString.withPointer(value) { pointer in
+                DrawTextW(dc, pointer, -1, &measured, UINT(DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX))
+            }
+            if result > 0 {
+                valueWidth = min(valueWidth, max(0, measured.right - measured.left))
+            }
+        }
+        let valueLeft = client.right - inset - valueWidth
+        WindowsDashboardDrawing.text(
+            row.label,
+            dc: dc,
+            rect: RECT(left: inset, top: y, right: valueLeft - self.scaled(8), bottom: y + self.scaled(22)),
+            color: WindowsDashboardPalette.captionText,
+            font: self.secondaryFont,
+            format: UINT(DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS))
+        WindowsDashboardDrawing.text(
+            value,
+            dc: dc,
+            rect: RECT(left: valueLeft, top: y, right: client.right - inset, bottom: y + self.scaled(22)),
+            color: WindowsDashboardPalette.secondaryText,
+            font: self.secondaryFont,
+            format: UINT(DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS))
+    }
+
     private func drawRule(dc: HDC?, client: RECT, y: Int32) {
         let inset = self.scaled(Metrics.horizontalInset)
         WindowsDashboardDrawing.line(
@@ -3016,6 +3069,7 @@ final class WindowsPopupWindow {
         var value: Int32 = 24 + Int32(row.windows.count) * 52 + 48
         if !row.planText.isEmpty || !row.accountText.isEmpty { value += 28 }
         if !row.balanceText.isEmpty { value += 44 }
+        value += WindowsProviderDetailLayout.contentHeight(row.detailSections)
         if !row.errorText.isEmpty { value += 48 }
         return self.scaled(value)
     }

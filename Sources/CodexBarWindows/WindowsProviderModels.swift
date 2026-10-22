@@ -21,6 +21,73 @@ struct WindowsProviderWindowSnapshot: Equatable, Sendable {
     }
 }
 
+/// A provider-specific section from upstream's `usage.details`. Values arrive pre-formatted for display.
+struct WindowsProviderDetailSection: Equatable, Sendable {
+    struct Row: Equatable, Sendable {
+        let label: String
+        let value: String
+        let secondaryValue: String?
+
+        init(label: String, value: String, secondaryValue: String? = nil) {
+            self.label = label
+            self.value = value
+            self.secondaryValue = secondaryValue
+        }
+
+        var displayValue: String {
+            self.secondaryValue.map { "\(self.value) \($0)" } ?? self.value
+        }
+    }
+
+    let title: String?
+    let rows: [Row]
+
+    init(title: String?, rows: [Row]) {
+        self.title = title
+        self.rows = rows
+    }
+
+    /// Removes the first row whose label is one of `labels` and whose value contains a digit, returning that value.
+    /// Sections left without rows are dropped, so a balance shown elsewhere is not repeated in the details.
+    static func extractingBalance(
+        from sections: [Self],
+        labels: [String]) -> (balance: String?, sections: [Self])
+    {
+        guard !labels.isEmpty else { return (nil, sections) }
+        let wanted = Set(labels.map { $0.lowercased() })
+        for (sectionIndex, section) in sections.enumerated() {
+            guard let rowIndex = section.rows.firstIndex(where: {
+                wanted.contains($0.label.lowercased()) && $0.value.contains(where: \.isNumber)
+            }) else { continue }
+            var rows = section.rows
+            let balance = rows.remove(at: rowIndex).value
+            var remaining = sections
+            if rows.isEmpty {
+                remaining.remove(at: sectionIndex)
+            } else {
+                remaining[sectionIndex] = Self(title: section.title, rows: rows)
+            }
+            return (balance, remaining)
+        }
+        return (nil, sections)
+    }
+}
+
+/// Unscaled layout of detail sections on the provider page, shared by drawing and height calculation.
+enum WindowsProviderDetailLayout {
+    static let sectionTopPadding: Int32 = 10
+    static let sectionBottomPadding: Int32 = 6
+    static let rowHeight: Int32 = 24
+
+    static func contentHeight(_ sections: [WindowsProviderDetailSection]) -> Int32 {
+        sections.reduce(0) { height, section in
+            let titleHeight: Int32 = section.title == nil ? 0 : Self.rowHeight
+            return height + Self.sectionTopPadding + titleHeight
+                + Int32(section.rows.count) * Self.rowHeight + Self.sectionBottomPadding
+        }
+    }
+}
+
 struct WindowsCodexResetCredits: Equatable, Sendable {
     let availableExpiries: [Date?]
 
@@ -77,6 +144,7 @@ struct WindowsProviderSnapshot: Sendable {
     let safeErrorText: String?
     let windows: [WindowsProviderWindowSnapshot]
     let codexResetCredits: WindowsCodexResetCredits?
+    let detailSections: [WindowsProviderDetailSection]
     let planText: String?
     let balanceText: String?
     let accountText: String?
@@ -104,6 +172,7 @@ struct WindowsProviderSnapshot: Sendable {
             accountText: self.accountText,
             updatedAt: self.updatedAt,
             codexResetCredits: self.codexResetCredits,
+            detailSections: self.detailSections,
             discardsRefreshResult: self.discardsRefreshResult,
             publicationAuthorityCheck: self.publicationAuthorityCheck)
     }
@@ -124,6 +193,7 @@ struct WindowsProviderSnapshot: Sendable {
         accountText: String? = nil,
         updatedAt: Date? = nil,
         codexResetCredits: WindowsCodexResetCredits? = nil,
+        detailSections: [WindowsProviderDetailSection] = [],
         discardsRefreshResult: Bool = false,
         publicationAuthorityCheck: (@Sendable () throws -> Bool)? = nil)
     {
@@ -138,6 +208,7 @@ struct WindowsProviderSnapshot: Sendable {
         self.safeErrorText = safeErrorText
         self.windows = windows
         self.codexResetCredits = codexResetCredits
+        self.detailSections = detailSections
         self.planText = planText
         self.balanceText = balanceText
         self.accountText = accountText
@@ -163,6 +234,7 @@ struct WindowsProviderSnapshot: Sendable {
             accountText: self.accountText,
             updatedAt: self.updatedAt,
             codexResetCredits: self.codexResetCredits,
+            detailSections: self.detailSections,
             discardsRefreshResult: self.discardsRefreshResult,
             publicationAuthorityCheck: self.publicationAuthorityCheck)
     }
@@ -183,6 +255,7 @@ struct WindowsProviderSnapshot: Sendable {
         accountText: String? = nil,
         updatedAt: Date? = nil,
         codexResetCredits: WindowsCodexResetCredits? = nil,
+        detailSections: [WindowsProviderDetailSection] = [],
         discardsRefreshResult: Bool = false,
         publicationAuthorityCheck: (@Sendable () throws -> Bool)? = nil)
     {
@@ -202,6 +275,7 @@ struct WindowsProviderSnapshot: Sendable {
             accountText: accountText,
             updatedAt: updatedAt,
             codexResetCredits: codexResetCredits,
+            detailSections: detailSections,
             discardsRefreshResult: discardsRefreshResult,
             publicationAuthorityCheck: publicationAuthorityCheck)
     }
@@ -229,6 +303,7 @@ struct WindowsProviderSnapshot: Sendable {
             accountText: self.accountText,
             updatedAt: self.updatedAt,
             codexResetCredits: self.codexResetCredits,
+            detailSections: self.detailSections,
             discardsRefreshResult: self.discardsRefreshResult,
             publicationAuthorityCheck: check)
     }
@@ -293,6 +368,7 @@ struct WindowsProviderRowPresentation: Equatable, Sendable {
     let codexResetCredits: WindowsCodexResetCredits?
     let codexResetCreditsText: String
     let codexResetCreditsAccessibilityText: String
+    let detailSections: [WindowsProviderDetailSection]
 
     init(
         provider: WindowsProviderID,
@@ -311,7 +387,8 @@ struct WindowsProviderRowPresentation: Equatable, Sendable {
         measuredText: String,
         codexResetCredits: WindowsCodexResetCredits? = nil,
         codexResetCreditsText: String = "",
-        codexResetCreditsAccessibilityText: String = "")
+        codexResetCreditsAccessibilityText: String = "",
+        detailSections: [WindowsProviderDetailSection] = [])
     {
         self.provider = provider
         self.profileID = profileID ?? .defaultID(for: provider)
@@ -330,6 +407,7 @@ struct WindowsProviderRowPresentation: Equatable, Sendable {
         self.codexResetCredits = codexResetCredits
         self.codexResetCreditsText = codexResetCreditsText
         self.codexResetCreditsAccessibilityText = codexResetCreditsAccessibilityText
+        self.detailSections = detailSections
     }
 
     var displayName: String {
@@ -351,19 +429,25 @@ struct WindowsProviderRowPresentation: Equatable, Sendable {
     }
 
     var accessibilityText: String {
-        [
-            self.displayName,
-            self.statusText,
-            self.percentText,
-            self.resetText,
-            self.planText,
-            self.codexResetCreditsAccessibilityText,
-            self.balanceText,
-            self.accountText,
-            self.measuredText,
-            self.sourceText,
-            self.errorText,
-        ]
+        let details = self.detailSections.flatMap { section in
+            section.rows.map { "\($0.label): \($0.displayValue)" }
+        }
+        let parts =
+            [
+                self.displayName,
+                self.statusText,
+                self.percentText,
+                self.resetText,
+                self.planText,
+                self.codexResetCreditsAccessibilityText,
+                self.balanceText,
+            ] + details + [
+                self.accountText,
+                self.measuredText,
+                self.sourceText,
+                self.errorText,
+            ]
+        return parts
             .filter { !$0.isEmpty }
             .joined(separator: ". ")
     }
@@ -768,7 +852,8 @@ struct WindowsDashboardPresentation: Equatable, Sendable {
             } ?? "",
             codexResetCredits: visibleCodexResetCredits,
             codexResetCreditsText: visibleCodexResetCredits?.compactText(now: now) ?? "",
-            codexResetCreditsAccessibilityText: visibleCodexResetCredits?.accessibilityText(now: now) ?? "")
+            codexResetCreditsAccessibilityText: visibleCodexResetCredits?.accessibilityText(now: now) ?? "",
+            detailSections: snapshot.detailSections)
     }
 
     private static func normalizedPercent(_ value: Double?) -> Double? {

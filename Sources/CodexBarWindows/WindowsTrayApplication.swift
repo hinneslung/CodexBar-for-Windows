@@ -775,7 +775,8 @@ extension WindowsTrayApplication {
             balanceText: cached.balanceText,
             accountText: cached.accountText,
             updatedAt: cached.updatedAt,
-            codexResetCredits: cached.codexResetCredits)
+            codexResetCredits: cached.codexResetCredits,
+            detailSections: cached.detailSections)
     }
 
     func toggleProvider(_ profileID: WindowsProviderProfileID) {

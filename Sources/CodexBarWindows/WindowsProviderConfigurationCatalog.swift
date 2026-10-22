@@ -9,6 +9,7 @@ struct WindowsProviderConfigurationField: Sendable, Equatable {
         case workspaceID
         case enterpriseHost
         case azureOpenAIAPIVersion
+        case vercelAccessToken
     }
 
     enum Style: Sendable, Equatable {
@@ -27,6 +28,7 @@ struct WindowsProviderConfigurationField: Sendable, Equatable {
         case sub2APIURL
         case xAITeamID
         case openCodeWorkspaceID
+        case vercelTeamID
         case oneOf([String])
     }
 
@@ -233,6 +235,8 @@ enum WindowsProviderConfigurationCatalog {
         .factory: .providerOwnedLocalSource,
         .gemini: .providerOwnedAuthenticationState,
         .grok: .providerCLI,
+        // Hugging Face also reads the token that `hf auth login` saves in WSL.
+        .huggingFace: .providerOwnedAuthenticationState,
         .jetBrains: .providerOwnedAuthenticationState,
         .kilo: .providerCLI,
         .kimi: .providerOwnedAuthenticationState,
@@ -285,6 +289,8 @@ enum WindowsProviderConfigurationCatalog {
         .kilo, .kimi, .liteLLM, .llmProxy, .moonshot, .neuralwatt, .ollama, .openai,
         .openCodeGo, .openRouter, .poe, .sub2API, .synthetic, .venice, .warp, .xAI,
         .zai, .zenMux, .clawRouter, .clinePass, .deepSeek, .minimax,
+        .huggingFace, .v0, .devPass, .atlasCloud, .vercel, .xKiro, .tavily, .linkup, .aerostack,
+        .sailResearch, .sofya, .fal, .munito,
     ]
 
     static let automaticSourceRoutes: [WindowsProviderID: WindowsAutomaticSourceRoute] = [
@@ -412,6 +418,92 @@ enum WindowsProviderConfigurationCatalog {
                     ],
                     securityNotice: browserSecurityNotice),
             ])
+    }
+
+    /// Provider-specific by design: Key labels and guidance for upstream plugin providers whose key is not a plain API
+    /// key, mirroring each upstream provider guide.
+    private static func pluginKey(
+        label: String = "API key",
+        placeholder: String = "Paste API key",
+        guidance: String) -> WindowsProviderConfigurationField
+    {
+        WindowsProviderConfigurationField(
+            id: "apiKey",
+            storage: .apiKey,
+            label: label,
+            placeholder: placeholder,
+            guidance: guidance,
+            style: .secureSingleLine,
+            required: true,
+            validation: .secret)
+    }
+
+    private static let huggingFaceToken = Self.pluginKey(
+        label: "Access token",
+        placeholder: "hf_…",
+        guidance: "A read token works. Fine-grained tokens need the Billing read permission.")
+
+    private static let falKey = Self.pluginKey(
+        guidance: "Use a key with billing read access: the Billing, Read only, or Full preset.")
+
+    private static let devPassKey = Self.pluginKey(guidance: "Use a regular LLM Gateway API key.")
+
+    private static let munitoKey = Self.pluginKey(
+        label: "Admin API key",
+        placeholder: "Paste Admin API key",
+        guidance: "Needs the Read account data permission.")
+
+    private static let aerostackToken = Self.pluginKey(
+        label: "Account token",
+        placeholder: "Paste account token",
+        guidance: "Your Aerostack account token, not an aek_ Agent Endpoint key. CodexBar does not refresh it.")
+
+    private static let vercelGatewayKey = Self.pluginKey(
+        label: "AI Gateway API key",
+        placeholder: "Paste AI Gateway API key",
+        guidance: "Shows team credits. Choose Access token instead for your personal budget.")
+
+    private static let v0Scope = WindowsProviderConfigurationField(
+        id: "workspaceID",
+        storage: .workspaceID,
+        label: "Scope (optional)",
+        placeholder: "Project ID or slug",
+        guidance: "Leave blank for the key's default scope.",
+        style: .plainText,
+        required: false,
+        validation: .nonempty)
+
+    /// Provider-specific by design: Vercel's budget route reads an access token from upstream's plugin secrets and the
+    /// team from workspaceID. Upstream prefers it over a gateway key, so the two stay separate credential choices.
+    private static var vercelAccessTokenSet: WindowsProviderCredentialSet {
+        .init(
+            id: "access-token",
+            label: "Access token",
+            source: "api",
+            acceptsManual: true,
+            acceptsOpenCode: false,
+            derivesManualCookieSource: false,
+            fields: [
+                .init(
+                    id: "vercelAccessToken",
+                    storage: .vercelAccessToken,
+                    label: "Access token",
+                    placeholder: "Paste Vercel access token",
+                    guidance: "Shows your personal AI Gateway budget for the team.",
+                    style: .secureSingleLine,
+                    required: true,
+                    validation: .secret),
+                .init(
+                    id: "workspaceID",
+                    storage: .workspaceID,
+                    label: "Team ID",
+                    placeholder: "team_…",
+                    guidance: "Copy it from the team's Settings > General page.",
+                    style: .plainText,
+                    required: true,
+                    validation: .vercelTeamID),
+            ],
+            role: .alternateRoute)
     }
 
     private static let openCodeWorkspace = WindowsProviderConfigurationField(
@@ -858,6 +950,25 @@ enum WindowsProviderConfigurationCatalog {
                     validation: .oneOf(["global", "bigmodel-cn"])),
             ]),
         Self.apiSchema(.zenMux, "zenmux"),
+        // Provider-specific by design: Upstream API-key plugin providers. The Linux CLI runs each through its API
+        // source with the key from the staged config.
+        Self.apiSchema(.huggingFace, "huggingface", apiKeyField: Self.huggingFaceToken),
+        Self.apiSchema(.v0, "v0", companions: [Self.v0Scope]),
+        Self.apiSchema(.devPass, "devpass", apiKeyField: Self.devPassKey),
+        Self.apiSchema(.atlasCloud, "atlascloud"),
+        Self.apiSchema(
+            .vercel,
+            "vercel",
+            additionalSets: [Self.vercelAccessTokenSet],
+            apiKeyField: Self.vercelGatewayKey),
+        Self.apiSchema(.xKiro, "xkiro"),
+        Self.apiSchema(.tavily, "tavily"),
+        Self.apiSchema(.linkup, "linkup"),
+        Self.apiSchema(.aerostack, "aerostack", apiKeyField: Self.aerostackToken),
+        Self.apiSchema(.sailResearch, "sailresearch"),
+        Self.apiSchema(.sofya, "sofya"),
+        Self.apiSchema(.fal, "fal", apiKeyField: Self.falKey),
+        Self.apiSchema(.munito, "munito", apiKeyField: Self.munitoKey),
     ]
 
     static let byProvider: [WindowsProviderID: WindowsProviderConfigurationSchema] =
@@ -1098,6 +1209,13 @@ enum WindowsProviderConfigurationValidator {
             return !value.contains("/") && value != "." && value != ".."
         case .openCodeWorkspaceID:
             return value.hasPrefix("wrk_") && !value.contains(where: \.isNewline)
+        case .vercelTeamID:
+            // Mirrors the upstream budget plugin's team check.
+            return value.utf8.count <= 128
+                && value.unicodeScalars.allSatisfy {
+                    ("a"..."z").contains($0) || ("A"..."Z").contains($0) || ("0"..."9").contains($0)
+                        || $0 == "_" || $0 == "-"
+                }
         case let .oneOf(values):
             return values.contains(value)
         }

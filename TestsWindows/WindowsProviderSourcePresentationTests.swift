@@ -204,7 +204,7 @@ struct WindowsProviderSourcePresentationTests {
             .amp, .antigravity, .augment, .claude, .codex, .cursor, .doubao, .grok, .kilo, .kiro,
         ]
         let providerStateProviders: Set<WindowsProviderID> = [
-            .bedrock, .clinePass, .codebuff, .gemini, .jetBrains, .kimi, .vertexAI,
+            .bedrock, .clinePass, .codebuff, .gemini, .huggingFace, .jetBrains, .kimi, .vertexAI,
         ]
         let localSourceProviders: Set<WindowsProviderID> = [.factory, .wayfinder]
         #expect(

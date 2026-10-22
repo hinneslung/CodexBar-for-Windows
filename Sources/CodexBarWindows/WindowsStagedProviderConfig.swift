@@ -134,6 +134,7 @@ enum WindowsStagedProviderConfig {
                     workspaceID: nil,
                     enterpriseHost: nil,
                     azureOpenAIAPIVersion: nil,
+                    pluginSecrets: nil,
                     tokenAccounts: nil,
                     codexActiveSource: CodexActiveSourcePayload(kind: "liveSystem", homePath: path),
                     codexProfileHomePaths: [path]),
@@ -170,6 +171,7 @@ enum WindowsStagedProviderConfig {
                     workspaceID: values[.workspaceID],
                     enterpriseHost: values[.enterpriseHost],
                     azureOpenAIAPIVersion: values[.azureOpenAIAPIVersion],
+                    pluginSecrets: values[.vercelAccessToken].map { ["VERCEL_ACCESS_TOKEN": $0] },
                     tokenAccounts: tokenAccountToken.map(Self.ephemeralTokenAccounts),
                     codexActiveSource: nil,
                     codexProfileHomePaths: nil),
@@ -214,6 +216,8 @@ enum WindowsStagedProviderConfig {
         let enterpriseHost: String?
         /// Upstream reads this provider-config extension key for Azure OpenAI only.
         let azureOpenAIAPIVersion: String?
+        /// Upstream plugin secrets, keyed by the plugin's secret name. Only Vercel's access token uses this.
+        let pluginSecrets: [String: String]?
         let tokenAccounts: TokenAccountDataPayload?
         let codexActiveSource: CodexActiveSourcePayload?
         let codexProfileHomePaths: [String]?

@@ -23,10 +23,30 @@ enum WindowsProviderBranding {
         .moonshot: "ProviderIcon-kimi",
     ]
 
+    /// Fixed atlas cells, independent of catalog order. Append new providers and their artwork at the end; never
+    /// reorder or remove a cell, so inserting or retiring a catalog entry cannot shift another provider's logo.
+    /// The cell after the last provider is the fallback.
+    static let atlasCells: [WindowsProviderID] = [
+        // Provider-specific by design: Pin each provider to the atlas cell holding its pre-rasterized logo.
+        .codex, .openai, .azureOpenAI, .claude, .clinePass, .cursor, .openCode, .openCodeGo, .alibaba,
+        .alibabaTokenPlan, .qwenCloud, .factory, .fireworks, .gemini, .antigravity, .copilot, .devin, .zai,
+        .minimax, .manus, .kimi, .kilo, .kiro, .vertexAI, .augment, .jetBrains, .moonshot, .amp, .t3Chat,
+        .ollama, .synthetic, .openRouter, .elevenLabs, .warp, .windsurf, .zed, .perplexity, .mimo, .doubao,
+        .sakana, .abacus, .mistral, .deepSeek, .deepInfra, .codebuff, .crof, .venice, .commandCode, .qoder,
+        .stepFun, .bedrock, .grok, .groq, .llmProxy, .liteLLM, .deepgram, .poe, .chutes, .neuralwatt,
+        .clawRouter, .longCat, .sub2API, .wayfinder, .zenMux, .aiAnd, .zoomMate, .xAI, .notion, .ibmBob,
+        .huggingFace, .v0, .devPass, .atlasCloud, .vercel, .xKiro, .tavily, .linkup, .aerostack,
+        .sailResearch, .sofya, .fal, .munito,
+    ]
+
+    static var fallbackAtlasIndex: Int {
+        self.atlasCells.count
+    }
+
     private static let atlasIndices: [WindowsProviderID: Int] =
         Dictionary(
-            uniqueKeysWithValues: WindowsProviderCatalog.entries.enumerated().map {
-                ($0.element.id, $0.offset)
+            uniqueKeysWithValues: Self.atlasCells.enumerated().map {
+                ($0.element, $0.offset)
             })
 
     static func logo(for provider: WindowsProviderID) -> WindowsProviderLogoReference {
@@ -34,7 +54,7 @@ enum WindowsProviderBranding {
             return WindowsProviderLogoReference(
                 provider: provider,
                 upstreamResourceName: "ProviderIcon-fallback",
-                atlasIndex: WindowsProviderCatalog.entries.count,
+                atlasIndex: Self.fallbackAtlasIndex,
                 usesFallback: true)
         }
         return WindowsProviderLogoReference(
@@ -48,8 +68,9 @@ enum WindowsProviderBranding {
 
 /// Owns the single pre-rasterized GDI bitmap shared by every provider row and header.
 ///
-/// Cells follow `WindowsProviderCatalog.entries`; the final cell is a safe fallback for
-/// forward-compatible provider IDs. The atlas is generated from upstream provider SVGs.
+/// Cells follow `WindowsProviderBranding.atlasCells`; the final cell is a safe fallback for
+/// forward-compatible provider IDs. Each cell is an upstream provider SVG rendered white at 18×18 px, centred on
+/// the dark dashboard background.
 final class WindowsProviderLogoAtlas {
     private let bitmap: HBITMAP
     private let sourceDC: HDC

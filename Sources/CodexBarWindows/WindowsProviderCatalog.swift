@@ -33,15 +33,19 @@ struct WindowsProviderCatalogEntry: Hashable, Sendable {
     let id: WindowsProviderID
     let displayName: String
     let searchAliases: [String]
+    /// Detail rows upstream presents as the provider's balance (`menuBarBalanceDetailLabels`).
+    let balanceDetailLabels: [String]
 
     init(
         id: WindowsProviderID,
         displayName: String,
-        searchAliases: [String] = [])
+        searchAliases: [String] = [],
+        balanceDetailLabels: [String] = [])
     {
         self.id = id
         self.displayName = displayName
         self.searchAliases = searchAliases
+        self.balanceDetailLabels = balanceDetailLabels
     }
 }
 
@@ -139,6 +143,28 @@ enum WindowsProviderCatalog {
         // mirror.
         .init(id: .notion, displayName: "Notion AI"),
         .init(id: .ibmBob, displayName: "IBM Bob"),
+        // Provider-specific by design: Upstream API-key plugin providers, in upstream order. Balance-only providers
+        // name the detail row upstream's menu bar shows as their balance.
+        .init(
+            id: .huggingFace,
+            displayName: "Hugging Face",
+            searchAliases: ["HF"]),
+        .init(id: .v0, displayName: "v0"),
+        .init(id: .devPass, displayName: "DevPass", balanceDetailLabels: ["Cycle remaining"]),
+        .init(id: .atlasCloud, displayName: "Atlas Cloud", balanceDetailLabels: ["Available balance"]),
+        .init(
+            id: .vercel,
+            displayName: "Vercel AI Gateway",
+            searchAliases: ["Vercel"],
+            balanceDetailLabels: ["Available balance"]),
+        .init(id: .xKiro, displayName: "xKiro"),
+        .init(id: .tavily, displayName: "Tavily"),
+        .init(id: .linkup, displayName: "Linkup", balanceDetailLabels: ["Credit balance"]),
+        .init(id: .aerostack, displayName: "Aerostack"),
+        .init(id: .sailResearch, displayName: "Sail Research", balanceDetailLabels: ["Credit balance"]),
+        .init(id: .sofya, displayName: "Sofya", balanceDetailLabels: ["Available credits"]),
+        .init(id: .fal, displayName: "fal", balanceDetailLabels: ["Credit balance"]),
+        .init(id: .munito, displayName: "Munito"),
     ]
 
     static let byID: [WindowsProviderID: WindowsProviderCatalogEntry] =
@@ -298,4 +324,18 @@ extension WindowsProviderID {
     static let xAI = Self(rawValue: "xai")
     static let notion = Self(rawValue: "notion")
     static let ibmBob = Self(rawValue: "ibmbob")
+    // Provider-specific by design: Stable raw-value IDs for upstream's API-key plugin providers.
+    static let huggingFace = Self(rawValue: "huggingface")
+    static let v0 = Self(rawValue: "v0")
+    static let devPass = Self(rawValue: "devpass")
+    static let atlasCloud = Self(rawValue: "atlascloud")
+    static let vercel = Self(rawValue: "vercel")
+    static let xKiro = Self(rawValue: "xkiro")
+    static let tavily = Self(rawValue: "tavily")
+    static let linkup = Self(rawValue: "linkup")
+    static let aerostack = Self(rawValue: "aerostack")
+    static let sailResearch = Self(rawValue: "sailresearch")
+    static let sofya = Self(rawValue: "sofya")
+    static let fal = Self(rawValue: "fal")
+    static let munito = Self(rawValue: "munito")
 }
