@@ -6,13 +6,13 @@ import Testing
 @Suite("Windows browser credential parser")
 struct WindowsBrowserCredentialParserTests {
     private static let browserProviderIDs: Set<String> = [
-        "alibabatokenplan", "amp", "commandcode", "cursor", "grok", "ollama",
+        "alibabatokenplan", "amp", "claude", "commandcode", "cursor", "grok", "kimi", "ollama",
         "opencodego", "qoder", "qwencloud", "sakana", "longcat", "manus", "mimo",
         "mistral", "opencode", "perplexity", "t3chat", "zoommate", "notion",
     ]
 
     private static let diagnosticProviderIDs: Set<String> = [
-        "longcat", "manus", "mimo", "mistral", "opencode", "perplexity", "stepfun",
+        "longcat", "manus", "mimo", "opencode", "perplexity", "stepfun",
         "t3chat", "zoommate", "notion",
     ]
 
@@ -26,10 +26,8 @@ struct WindowsBrowserCredentialParserTests {
         #expect(
             WindowsProviderConfigurationCatalog.byProvider[.copilot]?.credentialSet(
                 id: "browser-session") == nil)
-        #expect(WindowsProviderConfigurationCatalog.byProvider[.devin] == nil)
         let unsupported: [WindowsProviderID] = [
-            .abacus, .augment, .claude, .codex, .devin, .factory, .kimi, .minimax,
-            .windsurf, .zed,
+            .abacus, .augment, .codex, .devin, .factory, .minimax, .windsurf, .zed,
         ]
         for provider in unsupported {
             #expect(
@@ -357,9 +355,10 @@ struct WindowsBrowserCredentialParserTests {
 
     @Test
     func `diagnostic browser policies enforce upstream cookie and header requirements`() throws {
+        // Upstream needs only an ory_session_* cookie; csrftoken is optional and enables a fallback.
         let mistral = try Self.browserField(.mistral)
         #expect(mistral.normalized("ory_session_fixture=abc; csrftoken=csrf") != nil)
-        #expect(mistral.normalized("ory_session_fixture=abc") == nil)
+        #expect(mistral.normalized("ory_session_fixture=abc") != nil)
         #expect(mistral.normalized("csrftoken=csrf") == nil)
 
         let mimo = try Self.browserField(.mimo)

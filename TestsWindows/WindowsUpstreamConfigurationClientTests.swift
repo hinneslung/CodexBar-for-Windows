@@ -18,7 +18,7 @@ struct WindowsUpstreamConfigurationClientTests {
             "clawrouter=clawrouter", "clinepass=clinepass", "codebuff=codebuff",
             "commandcode=commandcode", "copilot=copilot",
             "cursor=cursor", "deepgram=deepgram", "deepinfra=deepinfra",
-            "deepseek=deepseek", "doubao=doubao", "elevenlabs=elevenlabs", "factory=factory",
+            "deepseek=deepseek", "devin=devin", "doubao=doubao", "elevenlabs=elevenlabs", "factory=factory",
             "fireworks=fireworks", "grok=grok", "groq=groqcloud", "ibmbob=ibmbob",
             "kilo=kilo", "kimi=kimi", "litellm=litellm", "llmproxy=llmproxy",
             "longcat=longcat", "manus=manus", "mimo=mimo", "minimax=minimax",
@@ -34,7 +34,7 @@ struct WindowsUpstreamConfigurationClientTests {
 
         let expectedManualAPIProviderIDs: Set = [
             "aiand", "alibaba", "amp", "azureopenai", "chutes", "claude", "clinepass", "codebuff",
-            "clawrouter", "copilot", "deepgram", "deepinfra", "deepseek", "doubao",
+            "clawrouter", "commandcode", "copilot", "deepgram", "deepinfra", "deepseek", "doubao",
             "elevenlabs", "factory", "fireworks", "groq", "ibmbob", "kilo", "kimi", "litellm",
             "llmproxy", "minimax", "moonshot", "neuralwatt", "ollama", "openai", "opencodego",
             "openrouter", "poe", "sub2api", "synthetic", "venice", "warp", "xai", "zai",
@@ -50,7 +50,7 @@ struct WindowsUpstreamConfigurationClientTests {
             })
         #expect(actualManualAPIProviderIDs == expectedManualAPIProviderIDs)
         let disabledManualAPIProviderIDs: Set = [
-            "alibabatokenplan", "commandcode", "cursor", "grok", "qoder", "qwencloud", "sakana",
+            "alibabatokenplan", "cursor", "grok", "qoder", "qwencloud", "sakana",
         ]
         #expect(
             Set(
@@ -84,11 +84,11 @@ struct WindowsUpstreamConfigurationClientTests {
         let supportedProviders = Set(WindowsProviderConfigurationCatalog.schemas.map(\.provider))
             .union(WindowsProviderConfigurationCatalog.providerAppOrCLIProviderIDs)
         #expect(catalogProviders.count == 69)
-        #expect(supportedProviders.count == 64)
-        #expect(WindowsProviderConfigurationCatalog.manualAPIProviderIDs.count == 38)
+        #expect(supportedProviders.count == 65)
+        #expect(WindowsProviderConfigurationCatalog.manualAPIProviderIDs.count == 39)
         #expect(WindowsProviderCredentialBridge.defaultRules.count == 19)
-        #expect(WindowsProviderConfigurationCatalog.providerAppOrCLIProviderIDs.count == 17)
-        #expect(WindowsProviderConfigurationCatalog.unavailableProviderIDs.count == 5)
+        #expect(WindowsProviderConfigurationCatalog.providerAppOrCLIProviderIDs.count == 19)
+        #expect(WindowsProviderConfigurationCatalog.unavailableProviderIDs.count == 4)
 
         let automaticDiagnosticProviders = Set(
             WindowsProviderConfigurationCatalog.schemas.compactMap { schema in
@@ -96,7 +96,7 @@ struct WindowsUpstreamConfigurationClientTests {
             })
         #expect(
             automaticDiagnosticProviders == [
-                .longCat, .manus, .mistral, .notion, .openCode, .perplexity, .stepFun,
+                .longCat, .manus, .notion, .openCode, .perplexity, .stepFun,
                 .t3Chat, .mimo, .zoomMate,
             ])
     }

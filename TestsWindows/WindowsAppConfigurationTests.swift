@@ -39,7 +39,7 @@ final class WindowsAppConfigurationTests: XCTestCase {
             Set(WindowsProviderID.supportedProviders),
             Set(WindowsProviderCatalog.entries.map(\.id))
                 .subtracting(WindowsProviderConfigurationCatalog.unavailableProviderIDs))
-        XCTAssertEqual(WindowsProviderID.supportedProviders.count, 64)
+        XCTAssertEqual(WindowsProviderID.supportedProviders.count, 65)
     }
 
     func test_mergingDisablesProfilesOfUnavailableProviders() {

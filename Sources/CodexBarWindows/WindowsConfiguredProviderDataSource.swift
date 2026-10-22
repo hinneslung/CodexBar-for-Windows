@@ -233,6 +233,7 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
         }
 
         @ProcessEnvironment var environmentOverrides: [String: String] = [:]
+        var bridgeCompanionValues: [String: String] = [:]
         do {
             var bridgeEnvironment = self.environment
             if let authURL = WindowsWSLDefaultUserHome.openCodeAuthURL(
@@ -241,9 +242,11 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
                 bridgeEnvironment[WindowsProviderCredentialBridge.wslOpenCodeDataHomeEnvironmentKey] =
                     authURL.deletingLastPathComponent().path
             }
-            environmentOverrides = try self.credentialBridge.environmentOverrides(
+            let projection = try self.credentialBridge.projection(
                 for: provider.id,
                 base: bridgeEnvironment)
+            environmentOverrides = projection.environment
+            bridgeCompanionValues = projection.companionValues
         } catch {
             return Self.credentialFailure(
                 provider: provider.id,
@@ -258,9 +261,10 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
 
         if !environmentOverrides.isEmpty {
             do {
+                // The bridged credential decides values such as the z.ai region; they override saved companions.
                 let config = try WindowsStagedProviderConfig.encodeBridge(
                     provider: provider.id,
-                    companionValues: provider.companionValues)
+                    companionValues: provider.companionValues.merging(bridgeCompanionValues) { _, bridge in bridge })
                 guard
                     let invocation = await self.stagedInvocation(
                         resolvedUsageCLI: resolved,

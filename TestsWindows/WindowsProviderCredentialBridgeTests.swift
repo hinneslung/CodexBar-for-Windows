@@ -67,14 +67,16 @@ struct WindowsProviderCredentialBridgeTests {
         let moonshot = try bridge.environmentOverrides(
             for: .moonshot,
             base: [:])
-        let zai = try bridge.environmentOverrides(
+        let zai = try bridge.projection(
             for: .zai,
             base: [:])
         #expect(moonshot["MOONSHOT_API_KEY"] == "moonshot-secret")
         #expect(moonshot["MOONSHOT_REGION"] == "china")
-        #expect(zai["ZHIPU_API_KEY"] == "zhipu-secret")
-        #expect(zai["Z_AI_REGION"] == "bigmodel-cn")
-        #expect(zai["WSLENV"] == "ZHIPU_API_KEY:Z_AI_REGION")
+        // Upstream reads the z.ai region only from config, so it is staged instead of exported.
+        #expect(zai.environment["Z_AI_API_KEY"] == "zhipu-secret")
+        #expect(zai.environment["Z_AI_REGION"] == nil)
+        #expect(zai.environment["WSLENV"] == "Z_AI_API_KEY")
+        #expect(zai.companionValues == ["region": "bigmodel-cn"])
     }
 
     @Test
