@@ -201,10 +201,11 @@ struct WindowsProviderSourcePresentationTests {
     @Test
     func `provider sign-in metadata remains tied to reviewed upstream routes`() throws {
         let cliProviders: Set<WindowsProviderID> = [
-            .amp, .antigravity, .augment, .claude, .codex, .cursor, .doubao, .grok, .kilo, .kiro,
+            .amp, .antigravity, .augment, .claude, .codeRabbit, .codex, .cursor, .doubao, .grok, .kilo, .kiro,
         ]
         let providerStateProviders: Set<WindowsProviderID> = [
-            .bedrock, .clinePass, .codebuff, .gemini, .huggingFace, .jetBrains, .kimi, .vertexAI,
+            .bedrock, .clinePass, .codebuff, .gemini, .huggingFace, .jetBrains, .kimi, .muse, .nous,
+            .vertexAI,
         ]
         let localSourceProviders: Set<WindowsProviderID> = [.factory, .wayfinder]
         #expect(
@@ -234,6 +235,7 @@ struct WindowsProviderSourcePresentationTests {
             .antigravity: "Antigravity/AntigravityProviderDescriptor.swift",
             .augment: "Augment/AugmentProviderDescriptor.swift",
             .claude: "Claude/ClaudeProviderDescriptor.swift",
+            .codeRabbit: "CodeRabbit/CodeRabbitProviderDescriptor.swift",
             .codex: "Codex/CodexProviderDescriptor.swift",
             .cursor: "Cursor/CursorProviderDescriptor.swift",
             .doubao: "Doubao/DoubaoProviderDescriptor.swift",
@@ -258,10 +260,15 @@ struct WindowsProviderSourcePresentationTests {
                 "Gemini/GeminiStatusProbe.swift",
                 "private static let credentialsPath = \"/.gemini/oauth_creds.json\""),
             (
+                "HuggingFace/HuggingFaceSettingsReader.swift",
+                ".appendingPathComponent(\"huggingface\", isDirectory: true)"),
+            (
                 "JetBrains/JetBrainsProviderDescriptor.swift", "let kind: ProviderFetchKind = .localProbe"),
             (
                 "Kimi/KimiProviderDescriptor.swift",
                 "KimiSettingsReader.hasKimiCodeCredential("),
+            ("Muse/MuseCredentials.swift", ".config/muse/auth.json"),
+            ("Nous/NousSettingsReader.swift", "[\"auth.json\", \"shared/nous_auth.json\"]"),
             (
                 "VertexAI/VertexAIProviderDescriptor.swift",
                 "VertexAIOAuthCredentialsStore.hasCredentials(environment:"),
@@ -280,7 +287,9 @@ struct WindowsProviderSourcePresentationTests {
 
     @Test
     func `unavailable provider metadata is the single configuration gate`() throws {
-        let expected: Set<WindowsProviderID> = [.abacus, .crof, .windsurf, .zed]
+        let expected: Set<WindowsProviderID> = [
+            .abacus, .crof, .helmcode, .langdock, .windsurf, .workBuddy, .zed,
+        ]
         #expect(WindowsProviderConfigurationCatalog.unavailableProviderIDs == expected)
         #expect(Set(WindowsProviderConfigurationCatalog.unavailableProviders.keys) == expected)
 

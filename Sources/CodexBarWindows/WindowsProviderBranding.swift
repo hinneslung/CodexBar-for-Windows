@@ -36,7 +36,9 @@ enum WindowsProviderBranding {
         .stepFun, .bedrock, .grok, .groq, .llmProxy, .liteLLM, .deepgram, .poe, .chutes, .neuralwatt,
         .clawRouter, .longCat, .sub2API, .wayfinder, .zenMux, .aiAnd, .zoomMate, .xAI, .notion, .ibmBob,
         .huggingFace, .v0, .devPass, .atlasCloud, .vercel, .xKiro, .tavily, .linkup, .aerostack,
-        .sailResearch, .sofya, .fal, .munito,
+        .sailResearch, .sofya, .fal, .munito, .langdock, .bifrost, .aixy, .helmcode, .xAPI, .nous, .muse,
+        .codeRabbit, .replicate, .raycast, .typeSafe, .hyper, .gitKraken, .museAI, .lithosAI, .workBuddy,
+        .tinyApi, .exa, .cosmic, .flora, .parallel, .claudePlatform,
     ]
 
     static var fallbackAtlasIndex: Int {

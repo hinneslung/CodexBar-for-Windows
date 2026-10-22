@@ -23,7 +23,171 @@ extension WindowsProviderConfigurationCatalog {
             apiSchema(.sofya, "sofya"),
             apiSchema(.fal, "fal", apiKeyField: falKey),
             apiSchema(.munito, "munito", apiKeyField: munitoKey),
+            // Provider-specific by design: Keys paired with the workspace, project, or base URL upstream reads.
+            apiSchema(.exa, "exa", companions: [exaKeyID], apiKeyField: exaServiceKey),
+            apiSchema(.flora, "flora", companions: [floraWorkspace], apiKeyField: floraKey),
+            apiSchema(.cosmic, "cosmic", companions: [cosmicProject], apiKeyField: cosmicToken),
+            apiSchema(.gitKraken, "gitkraken", companions: [gitKrakenOrganization], apiKeyField: gitKrakenToken),
+            apiSchema(.bifrost, "bifrost", companions: [bifrostBaseURL], apiKeyField: bifrostVirtualKey),
+            apiSchema(.aixy, "aixy", companions: [aixyBaseURL]),
+            apiSchema(
+                .hyper,
+                "hyper",
+                additionalSets: [browserSet(site: "hyper.charm.land", hosts: ["hyper.charm.land"])]),
+            // Provider-specific by design: Browser sessions the Linux CLI accepts as a manual cookie.
+            webSchema(
+                .claudePlatform,
+                "claudeplatform",
+                set: browserSet(
+                    site: "platform.claude.com",
+                    hosts: ["platform.claude.com"],
+                    requiredCookieNames: ["sessionKey"])),
+            webSchema(
+                .replicate,
+                "replicate",
+                set: browserSet(
+                    site: "replicate.com",
+                    hosts: ["replicate.com", "www.replicate.com"],
+                    requiredCookieNames: ["sessionid"])),
+            webSchema(
+                .raycast,
+                "raycast",
+                set: browserSet(
+                    site: "raycast.com",
+                    hosts: ["www.raycast.com", "raycast.com"],
+                    requiredCookieNames: ["__raycast_session"])),
+            webSchema(
+                .typeSafe,
+                "typesafe",
+                set: browserSet(site: "console.typesafe.ai", hosts: ["console.typesafe.ai", "typesafe.ai"])),
+            webSchema(
+                .parallel,
+                "parallel",
+                set: browserSet(site: "platform.parallel.ai", hosts: ["platform.parallel.ai"])),
+            webSchema(
+                .xAPI,
+                "xapi",
+                set: browserSet(
+                    site: "console.x.com",
+                    hosts: ["console.x.com", "x.com"],
+                    requiredCookieNames: ["auth_token", "ct0"],
+                    requiresAllCookieNames: true)),
+            webSchema(
+                .lithosAI,
+                "lithosai",
+                set: browserSet(
+                    site: "console.lithosai.cloud",
+                    hosts: ["console.lithosai.cloud"],
+                    requiredCookieNames: ["__Host-console_session", "__Host-console_csrf"],
+                    requiresAllCookieNames: true)),
+            webSchema(
+                .tinyApi,
+                "tinyapi",
+                set: browserSet(
+                    site: "tinyapi.rest",
+                    hosts: ["tinyapi.rest", "www.tinyapi.rest"],
+                    requiredCookieNamePrefixes: ["__Secure-authjs.session-token"])),
+            webSchema(
+                .museAI,
+                "museai",
+                set: browserSet(site: "muse.ai", hosts: ["muse.ai", "www.muse.ai"])),
         ]
+    }
+
+    private static let exaServiceKey = Self.pluginKey(
+        label: "Service key",
+        placeholder: "Paste Team Management service key",
+        guidance: "The Team Management service key, which can read API key usage.")
+
+    private static let floraKey = Self.pluginKey(guidance: "The key needs billing permission.")
+
+    private static let cosmicToken = Self.pluginKey(
+        label: "Personal access token",
+        placeholder: "Paste personal access token",
+        guidance: "Bucket keys are not supported.")
+
+    private static let gitKrakenToken = Self.pluginKey(
+        label: "API token",
+        placeholder: "Paste API token",
+        guidance: "A GitKraken API token that can read AI usage.")
+
+    private static let bifrostVirtualKey = Self.pluginKey(
+        label: "Virtual key",
+        placeholder: "Paste virtual key",
+        guidance: "The Bifrost virtual key whose quota to show.")
+
+    private static let exaKeyID = Self.companion(
+        id: "workspaceID",
+        storage: .workspaceID,
+        label: "API key ID",
+        placeholder: "ID of the API key to report on",
+        guidance: "The ID of the API key whose usage to show, not the service key.",
+        required: true,
+        validation: .pathSegment)
+
+    private static let floraWorkspace = Self.companion(
+        id: "workspaceID",
+        storage: .workspaceID,
+        label: "Workspace ID",
+        placeholder: "ws_…",
+        guidance: nil,
+        required: true,
+        validation: .floraWorkspaceID)
+
+    private static let cosmicProject = Self.companion(
+        id: "workspaceID",
+        storage: .workspaceID,
+        label: "Project ID",
+        placeholder: "Cosmic project ID",
+        guidance: nil,
+        required: true,
+        validation: .nonempty)
+
+    private static let gitKrakenOrganization = Self.companion(
+        id: "workspaceID",
+        storage: .workspaceID,
+        label: "Organization ID (optional)",
+        placeholder: "GitKraken organization ID",
+        guidance: "Leave blank for your default organization.",
+        required: false,
+        validation: .printableASCII(maximumLength: 256))
+
+    private static let bifrostBaseURL = Self.companion(
+        id: "enterpriseHost",
+        storage: .enterpriseHost,
+        label: "Base URL",
+        placeholder: "https://bifrost.example.test",
+        guidance: "HTTPS, or HTTP on a local or private network.",
+        required: true,
+        validation: .privateNetworkHTTPURL)
+
+    private static let aixyBaseURL = Self.companion(
+        id: "enterpriseHost",
+        storage: .enterpriseHost,
+        label: "Base URL (optional)",
+        placeholder: "https://api.aixy-gateway.com",
+        guidance: "Leave blank for the hosted gateway.",
+        required: false,
+        validation: .privateNetworkBaseURL)
+
+    private static func companion(
+        id: String,
+        storage: WindowsProviderConfigurationField.Storage,
+        label: String,
+        placeholder: String,
+        guidance: String?,
+        required: Bool,
+        validation: WindowsProviderConfigurationField.Validation) -> WindowsProviderConfigurationField
+    {
+        WindowsProviderConfigurationField(
+            id: id,
+            storage: storage,
+            label: label,
+            placeholder: placeholder,
+            guidance: guidance,
+            style: .plainText,
+            required: required,
+            validation: validation)
     }
 
     /// Provider-specific by design: Key labels and guidance for upstream plugin providers whose key is not a plain API
