@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.78.0-windows.3 — 2026-10-22
+
+- Add 13 providers that the bundled v0.78.0 CLI supports with an API key: Hugging Face, v0, DevPass, Atlas Cloud, Vercel AI Gateway, xKiro, Tavily, Linkup, Aerostack, Sail Research, Sofya, fal, and Munito. v0 accepts an optional scope, and Vercel accepts either an AI Gateway key or an access token with a team ID.
+- Show each provider's extra usage details, such as OpenRouter's credits and API key spend, on its provider page.
+- Show the balance of providers that report it only as a detail, such as Linkup or fal, in the overview.
+- Keep each provider's logo in a fixed position, so adding providers never changes another provider's logo.
+
 ## 0.78.0-windows.2 — 2026-10-22
 
 - Expose more of what the bundled v0.78.0 CLI supports for existing providers: a Claude browser session, Devin with a bearer token and organization, a Kimi browser session and region, an Azure OpenAI API version, and an optional Notion workspace ID.

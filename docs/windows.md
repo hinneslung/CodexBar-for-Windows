@@ -25,7 +25,7 @@
 - Downloads are unsigned, so Windows may warn about an unknown publisher. To check that a download is intact, open PowerShell in your download folder and run this command with your file's name:
 
   ```powershell
-  Get-FileHash .\CodexBar-v0.78.0-windows.2-windows-x86_64-setup.exe -Algorithm SHA256
+  Get-FileHash .\CodexBar-v0.78.0-windows.3-windows-x86_64-setup.exe -Algorithm SHA256
   ```
 
 - Download the `.sha256` file with the same name from the release page and open it in a text editor. Its long code should match the **Hash** shown by PowerShell. This checks for a damaged or changed download; it does not verify who published it.
