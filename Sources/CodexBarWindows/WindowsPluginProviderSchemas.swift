@@ -6,23 +6,23 @@ extension WindowsProviderConfigurationCatalog {
     static var pluginProviderSchemas: [WindowsProviderConfigurationSchema] {
         [
             // Provider-specific by design: Declare each plugin provider's staged API-key contract.
-            Self.apiSchema(.huggingFace, "huggingface", apiKeyField: Self.huggingFaceToken),
-            Self.apiSchema(.v0, "v0", companions: [Self.v0Scope]),
-            Self.apiSchema(.devPass, "devpass", apiKeyField: Self.devPassKey),
-            Self.apiSchema(.atlasCloud, "atlascloud"),
-            Self.apiSchema(
+            apiSchema(.huggingFace, "huggingface", apiKeyField: huggingFaceToken),
+            apiSchema(.v0, "v0", companions: [v0Scope]),
+            apiSchema(.devPass, "devpass", apiKeyField: devPassKey),
+            apiSchema(.atlasCloud, "atlascloud"),
+            apiSchema(
                 .vercel,
                 "vercel",
-                additionalSets: [Self.vercelAccessTokenSet],
-                apiKeyField: Self.vercelGatewayKey),
-            Self.apiSchema(.xKiro, "xkiro"),
-            Self.apiSchema(.tavily, "tavily"),
-            Self.apiSchema(.linkup, "linkup"),
-            Self.apiSchema(.aerostack, "aerostack", apiKeyField: Self.aerostackToken),
-            Self.apiSchema(.sailResearch, "sailresearch"),
-            Self.apiSchema(.sofya, "sofya"),
-            Self.apiSchema(.fal, "fal", apiKeyField: Self.falKey),
-            Self.apiSchema(.munito, "munito", apiKeyField: Self.munitoKey),
+                additionalSets: [vercelAccessTokenSet],
+                apiKeyField: vercelGatewayKey),
+            apiSchema(.xKiro, "xkiro"),
+            apiSchema(.tavily, "tavily"),
+            apiSchema(.linkup, "linkup"),
+            apiSchema(.aerostack, "aerostack", apiKeyField: aerostackToken),
+            apiSchema(.sailResearch, "sailresearch"),
+            apiSchema(.sofya, "sofya"),
+            apiSchema(.fal, "fal", apiKeyField: falKey),
+            apiSchema(.munito, "munito", apiKeyField: munitoKey),
         ]
     }
 
