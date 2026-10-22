@@ -436,9 +436,10 @@ struct WindowsConfiguredProviderDataSourceTests {
     }
 
     @Test
-    func `automatic source routes are declared only for Claude and Gemini`() {
+    func `automatic source routes are declared only for Claude, Gemini, and Charm Hyper`() {
         let routes = WindowsProviderConfigurationCatalog.automaticSourceRoutes
-        #expect(routes == [.claude: .preferred("oauth"), .gemini: .exclusive("api")])
+        #expect(
+            routes == [.claude: .preferred("oauth"), .gemini: .exclusive("api"), .hyper: .exclusive("api")])
         #expect(routes[.codex] == nil)
     }
 

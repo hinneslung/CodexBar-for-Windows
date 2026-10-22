@@ -96,6 +96,8 @@ enum WindowsProviderCatalog {
         .init(id: .moonshot, displayName: "Moonshot"),
         .init(id: .amp, displayName: "Amp"),
         .init(id: .t3Chat, displayName: "T3 Chat"),
+        // Provider-specific by design: Mirror upstream provider IDs, names and order for Windows menus.
+        .init(id: .langdock, displayName: "Langdock"),
         // Provider-specific by design: Continue the upstream registry mirror used by Windows menus and configuration
         // decoding.
         .init(id: .ollama, displayName: "Ollama"),
@@ -127,29 +129,46 @@ enum WindowsProviderCatalog {
             searchAliases: ["Groq"]),
         .init(id: .llmProxy, displayName: "LLM Proxy"),
         .init(id: .liteLLM, displayName: "LiteLLM"),
+        .init(id: .bifrost, displayName: "Bifrost"),
+        .init(id: .aixy, displayName: "Aixy"),
         .init(id: .deepgram, displayName: "Deepgram"),
         .init(id: .poe, displayName: "Poe"),
         .init(id: .chutes, displayName: "Chutes"),
         .init(id: .neuralwatt, displayName: "Neuralwatt"),
+        .init(id: .helmcode, displayName: "Helmcode"),
         .init(id: .clawRouter, displayName: "ClawRouter"),
         .init(id: .longCat, displayName: "LongCat"),
         .init(id: .sub2API, displayName: "Sub2API"),
+        // Provider-specific by design: Continue the upstream registry mirror in upstream order.
         .init(id: .wayfinder, displayName: "Wayfinder"),
         .init(id: .zenMux, displayName: "ZenMux"),
         .init(id: .aiAnd, displayName: "ai&"),
         .init(id: .zoomMate, displayName: "ZoomMate"),
         .init(id: .xAI, displayName: "xAI"),
+        .init(id: .xAPI, displayName: "X API", searchAliases: ["xAPI", "Twitter"]),
         // Provider-specific by design: Retain the upstream Notion registry entry and ordering in the Windows-only
         // mirror.
         .init(id: .notion, displayName: "Notion AI"),
         .init(id: .ibmBob, displayName: "IBM Bob"),
-        // Provider-specific by design: Upstream API-key plugin providers, in upstream order. Balance-only providers
-        // name the detail row upstream's menu bar shows as their balance.
+        // Provider-specific by design: Upstream plugin and provider-owned routes, in upstream order. Balance-only
+        // providers name the detail row upstream's menu bar shows as their balance.
+        .init(
+            id: .nous,
+            displayName: "Nous Portal",
+            searchAliases: ["Nous", "Hermes"],
+            balanceDetailLabels: ["Total usable", "Top-up credits"]),
+        .init(id: .muse, displayName: "Muse Code", searchAliases: ["Muse"]),
+        .init(id: .codeRabbit, displayName: "CodeRabbit"),
+        .init(id: .replicate, displayName: "Replicate", searchAliases: ["r8"]),
         .init(
             id: .huggingFace,
             displayName: "Hugging Face",
             searchAliases: ["HF"]),
+        .init(id: .raycast, displayName: "Raycast"),
         .init(id: .v0, displayName: "v0"),
+        .init(id: .typeSafe, displayName: "TypeSafe"),
+        .init(id: .hyper, displayName: "Charm Hyper", searchAliases: ["Hyper", "Charm"]),
+        .init(id: .gitKraken, displayName: "GitKraken AI", searchAliases: ["GitKraken", "GK"]),
         .init(id: .devPass, displayName: "DevPass", balanceDetailLabels: ["Cycle remaining"]),
         .init(id: .atlasCloud, displayName: "Atlas Cloud", balanceDetailLabels: ["Available balance"]),
         .init(
@@ -158,12 +177,22 @@ enum WindowsProviderCatalog {
             searchAliases: ["Vercel"],
             balanceDetailLabels: ["Available balance"]),
         .init(id: .xKiro, displayName: "xKiro"),
+        // Provider-specific by design: Continue the upstream-ordered plugin provider registry.
+        .init(id: .museAI, displayName: "Muse (muse.ai)", searchAliases: ["muse.ai"]),
+        .init(id: .lithosAI, displayName: "LithosAI"),
+        .init(id: .workBuddy, displayName: "WorkBuddy"),
         .init(id: .tavily, displayName: "Tavily"),
         .init(id: .linkup, displayName: "Linkup", balanceDetailLabels: ["Credit balance"]),
+        .init(id: .tinyApi, displayName: "TinyApi", balanceDetailLabels: ["Available credits"]),
+        .init(id: .exa, displayName: "Exa"),
+        .init(id: .cosmic, displayName: "Cosmic AI", searchAliases: ["Cosmic"]),
         .init(id: .aerostack, displayName: "Aerostack"),
         .init(id: .sailResearch, displayName: "Sail Research", balanceDetailLabels: ["Credit balance"]),
         .init(id: .sofya, displayName: "Sofya", balanceDetailLabels: ["Available credits"]),
         .init(id: .fal, displayName: "fal", balanceDetailLabels: ["Credit balance"]),
+        .init(id: .flora, displayName: "FLORA", balanceDetailLabels: ["Available"]),
+        .init(id: .parallel, displayName: "Parallel"),
+        .init(id: .claudePlatform, displayName: "Claude Platform", searchAliases: ["Anthropic Console"]),
         .init(id: .munito, displayName: "Munito"),
     ]
 
@@ -338,4 +367,27 @@ extension WindowsProviderID {
     static let sofya = Self(rawValue: "sofya")
     static let fal = Self(rawValue: "fal")
     static let munito = Self(rawValue: "munito")
+    // Provider-specific by design: Stable raw-value IDs for upstream plugin and provider-owned routes.
+    static let langdock = Self(rawValue: "langdock")
+    static let bifrost = Self(rawValue: "bifrost")
+    static let aixy = Self(rawValue: "aixy")
+    static let helmcode = Self(rawValue: "helmcode")
+    static let xAPI = Self(rawValue: "xapi")
+    static let nous = Self(rawValue: "nous")
+    static let muse = Self(rawValue: "muse")
+    static let codeRabbit = Self(rawValue: "coderabbit")
+    static let replicate = Self(rawValue: "replicate")
+    static let raycast = Self(rawValue: "raycast")
+    static let typeSafe = Self(rawValue: "typesafe")
+    static let hyper = Self(rawValue: "hyper")
+    static let gitKraken = Self(rawValue: "gitkraken")
+    static let museAI = Self(rawValue: "museai")
+    static let lithosAI = Self(rawValue: "lithosai")
+    static let workBuddy = Self(rawValue: "workbuddy")
+    static let tinyApi = Self(rawValue: "tinyapi")
+    static let exa = Self(rawValue: "exa")
+    static let cosmic = Self(rawValue: "cosmic")
+    static let flora = Self(rawValue: "flora")
+    static let parallel = Self(rawValue: "parallel")
+    static let claudePlatform = Self(rawValue: "claudeplatform")
 }

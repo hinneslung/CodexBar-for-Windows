@@ -29,6 +29,12 @@ struct WindowsProviderConfigurationField: Sendable, Equatable {
         case xAITeamID
         case openCodeWorkspaceID
         case vercelTeamID
+        /// One URL path segment: not empty, `.`, `..`, and without `/`.
+        case pathSegment
+        case floraWorkspaceID
+        case printableASCII(maximumLength: Int)
+        /// HTTPS, or HTTP on loopback and private networks, without a query or fragment.
+        case privateNetworkBaseURL
         case oneOf([String])
     }
 
@@ -229,6 +235,7 @@ enum WindowsProviderConfigurationCatalog {
         .claude: .providerCLI,
         .clinePass: .providerOwnedAuthenticationState,
         .codebuff: .providerOwnedAuthenticationState,
+        .codeRabbit: .providerCLI,
         .codex: .providerCLI,
         .cursor: .providerCLI,
         .doubao: .providerCLI,
@@ -241,6 +248,9 @@ enum WindowsProviderConfigurationCatalog {
         .kilo: .providerCLI,
         .kimi: .providerOwnedAuthenticationState,
         .kiro: .providerCLI,
+        // Muse Code and Nous Portal read the sign-in their own tools save in WSL.
+        .muse: .providerOwnedAuthenticationState,
+        .nous: .providerOwnedAuthenticationState,
         .vertexAI: .providerOwnedAuthenticationState,
         .wayfinder: .providerOwnedLocalSource,
     ]
@@ -290,7 +300,7 @@ enum WindowsProviderConfigurationCatalog {
         .openCodeGo, .openRouter, .poe, .sub2API, .synthetic, .venice, .warp, .xAI,
         .zai, .zenMux, .clawRouter, .clinePass, .deepSeek, .minimax,
         .huggingFace, .v0, .devPass, .atlasCloud, .vercel, .xKiro, .tavily, .linkup, .aerostack,
-        .sailResearch, .sofya, .fal, .munito,
+        .sailResearch, .sofya, .fal, .munito, .exa, .flora, .cosmic, .gitKraken, .bifrost, .aixy, .hyper,
     ]
 
     static let automaticSourceRoutes: [WindowsProviderID: WindowsAutomaticSourceRoute] = [
@@ -301,16 +311,31 @@ enum WindowsProviderConfigurationCatalog {
         // Provider-specific by design: upstream added a web-only Gemini app source, so the Linux CLI refuses plain
         // Auto for Gemini. Its API source keeps the existing Gemini CLI/OAuth route.
         .gemini: .exclusive("api"),
+        // Provider-specific by design: Charm Hyper's plain Auto includes its web source, which the Linux CLI refuses
+        // without a manual cookie. Its API source uses the configured key.
+        .hyper: .exclusive("api"),
     ]
 
     static let unavailableProviders: [WindowsProviderID: WindowsUnavailableProviderInfo] = [
+        // Provider-specific by design: Explain upstream routes the unchanged Linux CLI cannot run.
         .abacus: .init(
             explanation: "The upstream Abacus integration uses a browser session, which the Linux CLI does not accept.",
             resourceURL: "https://github.com/steipete/CodexBar/blob/main/docs/abacus.md"),
+        .helmcode: .init(
+            explanation: "The upstream Helmcode integration only reads a browser session, which the Linux CLI does not "
+                + "accept.",
+            resourceURL: "https://github.com/steipete/CodexBar/blob/main/docs/helmcode.md"),
+        .langdock: .init(
+            explanation: "The upstream Langdock integration only imports browser cookies on macOS.",
+            resourceURL: "https://github.com/steipete/CodexBar/blob/main/docs/langdock.md"),
+        .workBuddy: .init(
+            explanation: "WorkBuddy sessions require the signed-in Chrome version, which the Linux CLI cannot provide.",
+            resourceURL: "https://github.com/steipete/CodexBar/blob/main/docs/workbuddy.md"),
         .crof: .init(
             explanation: "Crof was removed from CodexBar after the service shut down.",
             resourceURL: "https://github.com/steipete/CodexBar/pull/3828",
             removedUpstream: true),
+        // Provider-specific by design: Continue the unsupported-route explanations for the Linux CLI.
         .windsurf: .init(
             explanation: "The upstream Windsurf integration depends on macOS browser and local app data.",
             resourceURL: "https://github.com/steipete/CodexBar/blob/main/docs/windsurf.md"),
@@ -875,7 +900,7 @@ enum WindowsProviderConfigurationCatalog {
         self.byProvider[provider]?.credentialSet(id: id)
     }
 
-    private static func browserSet(
+    static func browserSet(
         site: String,
         hosts: [String],
         input: WindowsBrowserCredentialPolicy.Input = .cookieHeaderOrCURL,
@@ -1034,7 +1059,7 @@ enum WindowsProviderConfigurationCatalog {
             ] + additionalSets)
     }
 
-    private static func webSchema(
+    static func webSchema(
         _ provider: WindowsProviderID,
         _ cliName: String,
         set: WindowsProviderCredentialSet) -> WindowsProviderConfigurationSchema
@@ -1111,6 +1136,20 @@ enum WindowsProviderConfigurationValidator {
                     ("a"..."z").contains($0) || ("A"..."Z").contains($0) || ("0"..."9").contains($0)
                         || $0 == "_" || $0 == "-"
                 }
+        case .pathSegment:
+            return !value.contains("/") && !value.contains(where: \.isNewline) && value != "." && value != ".."
+        case .floraWorkspaceID:
+            return value.hasPrefix("ws_") && value.count > 3
+                && value.dropFirst(3).unicodeScalars.allSatisfy {
+                    ("a"..."z").contains($0) || ("A"..."Z").contains($0) || ("0"..."9").contains($0)
+                }
+        case let .printableASCII(maximumLength):
+            return value.utf8.count <= maximumLength && value.utf8.allSatisfy { (0x21...0x7E).contains($0) }
+        case .privateNetworkBaseURL:
+            guard let url = Self.validatedURL(value, allowingHTTPFor: Self.isPrivateNetworkHost) else {
+                return false
+            }
+            return url.query == nil && url.fragment == nil
         case let .oneOf(values):
             return values.contains(value)
         }

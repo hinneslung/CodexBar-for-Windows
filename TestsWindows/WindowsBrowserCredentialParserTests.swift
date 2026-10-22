@@ -8,7 +8,8 @@ struct WindowsBrowserCredentialParserTests {
     private static let browserProviderIDs: Set<String> = [
         "alibabatokenplan", "amp", "claude", "commandcode", "cursor", "grok", "kimi", "ollama",
         "opencodego", "qoder", "qwencloud", "sakana", "longcat", "manus", "mimo",
-        "mistral", "opencode", "perplexity", "t3chat", "zoommate", "notion",
+        "mistral", "opencode", "perplexity", "t3chat", "zoommate", "notion", "hyper", "claudeplatform",
+        "replicate", "raycast", "typesafe", "parallel", "xapi", "lithosai", "tinyapi", "museai",
     ]
 
     private static let diagnosticProviderIDs: Set<String> = [

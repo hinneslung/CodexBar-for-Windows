@@ -15,7 +15,7 @@ final class WindowsAppConfigurationTests: XCTestCase {
             ("zai", "z.ai"), ("minimax", "MiniMax"), ("manus", "Manus"), ("kimi", "Kimi"),
             ("kilo", "Kilo"), ("kiro", "Kiro"), ("vertexai", "Vertex AI"), ("augment", "Augment"),
             ("jetbrains", "JetBrains AI"), ("moonshot", "Moonshot"), ("amp", "Amp"),
-            ("t3chat", "T3 Chat"), ("ollama", "Ollama"), ("synthetic", "Synthetic"),
+            ("t3chat", "T3 Chat"), ("langdock", "Langdock"), ("ollama", "Ollama"), ("synthetic", "Synthetic"),
             ("openrouter", "OpenRouter"), ("elevenlabs", "ElevenLabs"), ("warp", "Warp"),
             ("windsurf", "Windsurf"),
             ("zed", "Zed"), ("perplexity", "Perplexity"), ("mimo", "Xiaomi MiMo"),
@@ -25,15 +25,22 @@ final class WindowsAppConfigurationTests: XCTestCase {
             ("venice", "Venice"), ("commandcode", "Command Code"), ("qoder", "Qoder"),
             ("stepfun", "StepFun"), ("bedrock", "AWS Bedrock"), ("grok", "Grok"),
             ("groq", "GroqCloud"), ("llmproxy", "LLM Proxy"), ("litellm", "LiteLLM"),
+            ("bifrost", "Bifrost"), ("aixy", "Aixy"),
             ("deepgram", "Deepgram"), ("poe", "Poe"), ("chutes", "Chutes"),
-            ("neuralwatt", "Neuralwatt"), ("clawrouter", "ClawRouter"), ("longcat", "LongCat"),
+            ("neuralwatt", "Neuralwatt"), ("helmcode", "Helmcode"), ("clawrouter", "ClawRouter"),
+            ("longcat", "LongCat"),
             ("sub2api", "Sub2API"), ("wayfinder", "Wayfinder"), ("zenmux", "ZenMux"),
-            ("aiand", "ai&"), ("zoommate", "ZoomMate"), ("xai", "xAI"),
+            ("aiand", "ai&"), ("zoommate", "ZoomMate"), ("xai", "xAI"), ("xapi", "X API"),
             ("notion", "Notion AI"), ("ibmbob", "IBM Bob"),
-            ("huggingface", "Hugging Face"), ("v0", "v0"), ("devpass", "DevPass"),
-            ("atlascloud", "Atlas Cloud"), ("vercel", "Vercel AI Gateway"), ("xkiro", "xKiro"),
-            ("tavily", "Tavily"), ("linkup", "Linkup"), ("aerostack", "Aerostack"),
-            ("sailresearch", "Sail Research"), ("sofya", "Sofya"), ("fal", "fal"), ("munito", "Munito"),
+            ("nous", "Nous Portal"), ("muse", "Muse Code"), ("coderabbit", "CodeRabbit"),
+            ("replicate", "Replicate"), ("huggingface", "Hugging Face"), ("raycast", "Raycast"), ("v0", "v0"),
+            ("typesafe", "TypeSafe"), ("hyper", "Charm Hyper"), ("gitkraken", "GitKraken AI"),
+            ("devpass", "DevPass"), ("atlascloud", "Atlas Cloud"), ("vercel", "Vercel AI Gateway"),
+            ("xkiro", "xKiro"), ("museai", "Muse (muse.ai)"), ("lithosai", "LithosAI"), ("workbuddy", "WorkBuddy"),
+            ("tavily", "Tavily"), ("linkup", "Linkup"), ("tinyapi", "TinyApi"), ("exa", "Exa"),
+            ("cosmic", "Cosmic AI"), ("aerostack", "Aerostack"), ("sailresearch", "Sail Research"),
+            ("sofya", "Sofya"), ("fal", "fal"), ("flora", "FLORA"), ("parallel", "Parallel"),
+            ("claudeplatform", "Claude Platform"), ("munito", "Munito"),
         ]
 
         XCTAssertEqual(WindowsProviderCatalog.entries.map(\.id.rawValue), expected.map(\.0))
@@ -43,7 +50,7 @@ final class WindowsAppConfigurationTests: XCTestCase {
             Set(WindowsProviderID.supportedProviders),
             Set(WindowsProviderCatalog.entries.map(\.id))
                 .subtracting(WindowsProviderConfigurationCatalog.unavailableProviderIDs))
-        XCTAssertEqual(WindowsProviderID.supportedProviders.count, 78)
+        XCTAssertEqual(WindowsProviderID.supportedProviders.count, 97)
     }
 
     func test_mergingDisablesProfilesOfUnavailableProviders() {
