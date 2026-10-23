@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.78.0-windows.5 — 2026-10-23
+
+- Show the results of refreshes that take longer than the refresh interval. With a one-minute interval, a refresh slower than a minute used to restart forever without updating the dashboard.
+- Timer refreshes no longer queue a second refresh while one is running; a manual Refresh still runs once more afterwards.
+
 ## 0.78.0-windows.4 — 2026-10-22
 
 - Add providers that need a key plus a workspace or address: Exa, FLORA, Cosmic AI, GitKraken AI, Bifrost, Aixy, and Charm Hyper (API key or browser session).
