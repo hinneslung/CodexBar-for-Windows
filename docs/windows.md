@@ -30,6 +30,7 @@
 
 - Download the `.sha256` file with the same name from the release page and open it in a text editor. Its long code should match the **Hash** shown by PowerShell. This checks for a damaged or changed download; it does not verify who published it.
 - Upgrade an installed copy by running the newer installer. Setup can close the installed app if needed.
+- When a newer release is published, a download icon appears next to the pin at the bottom left of the overview. Click it to open the release page; CodexBar does not download or install anything itself. To check, the app asks GitHub for the latest release a minute after it starts and then once a day. This is the only request the Windows app makes itself; usage requests come from the CLI in WSL. Turn off **Check for updates** in Settings to stop it.
 - To uninstall, quit CodexBar from its notification-area menu, then use Windows Settings → Apps.
 - Updating or uninstalling leaves your settings and saved keys in `%LOCALAPPDATA%\CodexBar`, and does not remove your WSL data. To remove a key or browser session, click **Clear** in that provider's settings before uninstalling.
 - If you download a test build from [GitHub Actions](https://github.com/hinneslung/CodexBar-for-Windows/actions/workflows/release-cli.yml), GitHub adds an outer ZIP. Extract it to find the installer or portable package and its checksum.

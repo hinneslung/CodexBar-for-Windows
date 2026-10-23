@@ -32,6 +32,8 @@ final class WindowsPopupWindow {
         static let overviewRowHeight: Int32 = 60
         static let switcherRowHeight: Int32 = 36
         static let settingsGlobalHeight: Int32 = 50
+        /// Percentage used, Run at startup, Refresh interval, and Check for updates.
+        static let settingsGlobalRowCount: Int32 = 4
         static let settingsSectionHeaderHeight: Int32 = 28
         static let settingsSearchHeight: Int32 = 38
         static let settingsRowHeight: Int32 = 46
@@ -49,6 +51,7 @@ final class WindowsPopupWindow {
     private static let copyIconGlyph = "\u{E8C8}"
     private static let deleteIconGlyph = "\u{E74D}"
     private static let pinIconGlyph = "\u{E718}"
+    private static let updateIconGlyph = "\u{E896}"
     private static let codexHomeHint =
         "Leave blank to use the default Codex sign-in. Example: ~/.codex-personal"
 
@@ -69,6 +72,8 @@ final class WindowsPopupWindow {
         case provider(Int)
         case toggleUsageBarsShowUsed
         case toggleRunAtStartup
+        case toggleCheckForUpdates
+        case openUpdate
         case toggleProvider(WindowsProviderProfileID)
         case moveProvider(WindowsProviderProfileID, Int)
         case moveProviderToTop(WindowsProviderProfileID)
@@ -93,6 +98,7 @@ final class WindowsPopupWindow {
     private let usesTargetableQAWindow =
         ProcessInfo.processInfo.environment["CODEXBAR_WINDOWS_QA_TARGETABLE"] == "1"
     private var presentation = WindowsDashboardPresentation.loading()
+    private var availableUpdate: WindowsAvailableUpdate?
     private var configuration = WindowsAppConfiguration.defaults
     private var page: Page = .overview
     private var hitTargets: [HitTarget] = []
@@ -337,6 +343,12 @@ final class WindowsPopupWindow {
             self.page = .overview
         }
         self.resizeForCurrentPage()
+        _ = InvalidateRect(self.window, nil, false)
+    }
+
+    func updateAvailableUpdate(_ update: WindowsAvailableUpdate?) {
+        guard update != self.availableUpdate else { return }
+        self.availableUpdate = update
         _ = InvalidateRect(self.window, nil, false)
     }
 
@@ -1034,6 +1046,20 @@ final class WindowsPopupWindow {
             bottom: y + self.scaled(Metrics.settingsGlobalHeight))
         self.drawRefreshInterval(dc: dc, client: client, rect: refreshRect)
         y = refreshRect.bottom
+        let updatesRect = RECT(
+            left: 0,
+            top: y,
+            right: client.right,
+            bottom: y + self.scaled(Metrics.settingsGlobalHeight))
+        self.drawGlobalToggle(
+            dc: dc,
+            client: client,
+            rect: updatesRect,
+            isOn: self.configuration.checkForUpdates,
+            title: "Check for updates",
+            subtitle: "Show an icon when a new release is on GitHub",
+            action: .toggleCheckForUpdates)
+        y = updatesRect.bottom
         let enabledProviders = self.configuration.enabledProviders
         let disabledProviders = WindowsProviderSettingsSearch.filteredDisabledProviders(
             in: self.configuration,
@@ -2095,7 +2121,7 @@ final class WindowsPopupWindow {
             }
             let rowTop =
                 self.scaled(
-                    Metrics.headerHeight + Metrics.settingsGlobalHeight * 3
+                    Metrics.headerHeight + Metrics.settingsGlobalHeight * Metrics.settingsGlobalRowCount
                         + Metrics.settingsSectionHeaderHeight
                         + Int32(self.configuration.enabledProviders.count) * Metrics.settingsRowHeight
                         + Metrics.settingsSectionHeaderHeight) - self.scrollOffset
@@ -2635,6 +2661,9 @@ final class WindowsPopupWindow {
                 font: self.systemIconFont,
                 format: UINT(DT_CENTER | DT_VCENTER | DT_SINGLELINE))
             self.hitTargets.append(HitTarget(rect: pinRect, action: .togglePin))
+            if self.availableUpdate != nil {
+                self.drawUpdateButton(dc: dc, top: top, bottom: client.bottom, left: pinRect.right + self.scaled(4))
+            }
         }
         if let saveAction {
             let saveRect = RECT(
@@ -2837,6 +2866,10 @@ final class WindowsPopupWindow {
         switch target.action {
         case .togglePin:
             self.togglePin()
+        case .openUpdate:
+            self.openAvailableUpdate()
+        case .toggleCheckForUpdates:
+            WindowsTrayApplication.current?.toggleCheckForUpdates()
         case .refresh:
             WindowsTrayApplication.current?.requestRefresh()
         case .settings:
@@ -3081,7 +3114,8 @@ final class WindowsPopupWindow {
                 in: self.configuration,
                 query: self.disabledProviderSearchQuery).count)
         return self.scaled(
-            Metrics.settingsGlobalHeight * 3 + Metrics.settingsSectionHeaderHeight * 2
+            Metrics.settingsGlobalHeight * Metrics.settingsGlobalRowCount
+                + Metrics.settingsSectionHeaderHeight * 2
                 + Metrics.settingsSearchHeight)
             + Int32(self.configuration.enabledProviders.count + disabledCount)
             * self.scaled(Metrics.settingsRowHeight)
@@ -3264,6 +3298,34 @@ final class WindowsPopupWindow {
         guard count > 0 else { return nil }
         let end = buffer.firstIndex(of: 0) ?? min(Int(count), buffer.count)
         return String(decoding: buffer[..<end], as: UTF16.self)
+    }
+
+    /// The download icon beside the pin, shown while a newer release is published.
+    private func drawUpdateButton(dc: HDC?, top: Int32, bottom: Int32, left: Int32) {
+        let rect = RECT(left: left, top: top, right: left + self.scaled(34), bottom: bottom)
+        WindowsDashboardDrawing.roundedRect(
+            dc: dc,
+            rect: RECT(left: rect.left, top: top + self.scaled(5), right: rect.right, bottom: bottom - self.scaled(5)),
+            radius: self.scaled(6),
+            fill: WindowsDashboardPalette.sageSurface,
+            border: WindowsDashboardPalette.sage)
+        WindowsDashboardDrawing.text(
+            Self.updateIconGlyph,
+            dc: dc,
+            rect: rect,
+            color: WindowsDashboardPalette.sageText,
+            font: self.systemIconFont,
+            format: UINT(DT_CENTER | DT_VCENTER | DT_SINGLELINE))
+        self.hitTargets.append(HitTarget(rect: rect, action: .openUpdate))
+    }
+
+    private func openAvailableUpdate() {
+        guard let url = self.availableUpdate?.releaseURL, WindowsUpdateCheck.isTrustedReleaseURL(url) else { return }
+        WindowsWideString.withPointer("open") { operation in
+            WindowsWideString.withPointer(url.absoluteString) { file in
+                _ = ShellExecuteW(self.window, operation, file, nil, nil, Int32(SW_SHOWNORMAL))
+            }
+        }
     }
 
     private func openProviderResource(_ provider: WindowsProviderID) {

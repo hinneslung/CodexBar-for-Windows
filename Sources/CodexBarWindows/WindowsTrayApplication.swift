@@ -49,6 +49,26 @@ private final class WindowsRefreshResultStore: @unchecked Sendable {
     }
 }
 
+/// Hands a finished update check from its background task to the message loop.
+private final class WindowsUpdateCheckResultStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private var result: WindowsAvailableUpdate??
+
+    func publish(_ update: WindowsAvailableUpdate?) {
+        self.lock.lock()
+        self.result = .some(update)
+        self.lock.unlock()
+    }
+
+    func take() -> WindowsAvailableUpdate?? {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let result = self.result
+        self.result = nil
+        return result
+    }
+}
+
 private struct WindowsConfigurationTaskResult: Sendable {
     let requestID: Foundation.UUID
     let provider: WindowsProviderID
@@ -121,12 +141,14 @@ final class WindowsTrayApplication {
     private static let trayIconID: UINT = 1
     private static let refreshTimerID: UINT_PTR = 1
     private static let refreshCompletionTimerID: UINT_PTR = 2
+    private static let updateCheckTimerID: UINT_PTR = 3
     private static let refreshCompletionPollMilliseconds: UINT = 100
     private static let trayCallbackMessage = UINT(WM_APP + 1)
     private static let refreshCompletedMessage = UINT(WM_APP + 2)
     private static let trayAddCompletedMessage = UINT(WM_APP + 3)
     private static let configurationTaskCompletedMessage = UINT(WM_APP + 4)
     private static let startupTaskCompletedMessage = UINT(WM_APP + 5)
+    private static let updateCheckCompletedMessage = UINT(WM_APP + 6)
     static let addTrayIconFlags = UINT(NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP)
     static let updateTrayTooltipFlags = UINT(NIF_TIP | NIF_SHOWTIP)
 
@@ -139,6 +161,9 @@ final class WindowsTrayApplication {
     private let showPopupOnStart: Bool
     private let refreshResultStore = WindowsRefreshResultStore()
     private let configurationTaskResultStore = WindowsConfigurationTaskResultStore()
+    private let updateCheckResultStore = WindowsUpdateCheckResultStore()
+    private let currentAppVersion = WindowsUpdateCheck.currentVersion()
+    private var updateCheckGeneration: UInt64 = 0
     private let providerConfigurationClient: WindowsProviderConfigurationClient
     private var messageWindow: HWND?
     private var taskbarCreatedMessage: UINT = 0
@@ -204,6 +229,7 @@ final class WindowsTrayApplication {
         if self.configuration.runAtStartup {
             WindowsStartupTask.repairIfEnabled()
         }
+        self.scheduleUpdateCheck(afterSeconds: WindowsUpdateCheck.firstCheckDelaySeconds)
         self.popup.update(self.presentation)
         self.popup.updateConfiguration(self.configuration)
         self.requestRefresh()
@@ -249,6 +275,8 @@ final class WindowsTrayApplication {
                 self.consumeRefreshResult()
             } else if UINT_PTR(wParam) == Self.refreshTimerID {
                 self.requestRefresh(.scheduled)
+            } else if UINT_PTR(wParam) == Self.updateCheckTimerID {
+                self.runUpdateCheck()
             }
             return 0
         case Self.refreshCompletedMessage:
@@ -266,6 +294,9 @@ final class WindowsTrayApplication {
             return 0
         case Self.startupTaskCompletedMessage:
             self.completeStartupChange(succeeded: wParam != 0, isRollback: lParam != 0)
+            return 0
+        case Self.updateCheckCompletedMessage:
+            self.consumeUpdateCheckResult(generation: UInt64(wParam))
             return 0
         case UINT(WM_DESTROY):
             self.removeTrayIcon()
@@ -820,6 +851,21 @@ extension WindowsTrayApplication {
         return true
     }
 
+    func toggleCheckForUpdates() {
+        let previous = self.configuration.checkForUpdates
+        self.configuration.checkForUpdates.toggle()
+        guard self.saveConfiguration() else {
+            self.configuration.checkForUpdates = previous
+            self.popup.updateConfiguration(self.configuration)
+            return
+        }
+        if self.configuration.checkForUpdates {
+            self.runUpdateCheck()
+        } else {
+            self.stopUpdateChecks()
+        }
+    }
+
     func toggleRunAtStartup() {
         guard let enabled = self.startupChange.begin(currentValue: self.configuration.runAtStartup)
         else { return }
@@ -1070,6 +1116,7 @@ extension WindowsTrayApplication {
         if let messageWindow = self.messageWindow {
             _ = KillTimer(messageWindow, Self.refreshTimerID)
             _ = KillTimer(messageWindow, Self.refreshCompletionTimerID)
+            _ = KillTimer(messageWindow, Self.updateCheckTimerID)
         }
         self.removeTrayIcon()
         self.applicationIcon.remove(from: self.popup.window)
@@ -1078,5 +1125,53 @@ extension WindowsTrayApplication {
             _ = DestroyWindow(messageWindow)
         }
         self.messageWindow = nil
+    }
+}
+
+// MARK: - Update check
+
+extension WindowsTrayApplication {
+    /// Starts the update-check timer when checks are on and this is a packaged build with a known version.
+    private func scheduleUpdateCheck(afterSeconds seconds: Int) {
+        guard let messageWindow = self.messageWindow else { return }
+        guard self.configuration.checkForUpdates, self.currentAppVersion != nil else {
+            _ = KillTimer(messageWindow, Self.updateCheckTimerID)
+            return
+        }
+        _ = SetTimer(messageWindow, Self.updateCheckTimerID, UINT(seconds * 1000), nil)
+    }
+
+    /// Checks GitHub once, then every interval. A failed check changes nothing and is retried next interval.
+    private func runUpdateCheck() {
+        self.scheduleUpdateCheck(afterSeconds: WindowsUpdateCheck.checkIntervalSeconds)
+        guard self.configuration.checkForUpdates, let current = self.currentAppVersion,
+              let messageWindow = self.messageWindow
+        else { return }
+        self.updateCheckGeneration &+= 1
+        let generation = self.updateCheckGeneration
+        let store = self.updateCheckResultStore
+        let window = WindowsWindowHandleBox(messageWindow)
+        Task.detached(priority: .utility) { @Sendable [store, window] in
+            guard let data = await WindowsUpdateCheck.fetchLatestRelease(currentVersion: current) else { return }
+            store.publish(WindowsUpdateCheck.availableUpdate(current: current, latestRelease: data))
+            _ = PostMessageW(window.value, Self.updateCheckCompletedMessage, WPARAM(generation), 0)
+        }
+    }
+
+    private func stopUpdateChecks() {
+        self.updateCheckGeneration &+= 1
+        if let messageWindow = self.messageWindow {
+            _ = KillTimer(messageWindow, Self.updateCheckTimerID)
+        }
+        _ = self.updateCheckResultStore.take()
+        self.popup.updateAvailableUpdate(nil)
+    }
+
+    private func consumeUpdateCheckResult(generation: UInt64) {
+        guard let result = self.updateCheckResultStore.take(),
+              generation == self.updateCheckGeneration,
+              self.configuration.checkForUpdates
+        else { return }
+        self.popup.updateAvailableUpdate(result)
     }
 }
