@@ -243,6 +243,8 @@ struct WindowsAppConfiguration: Codable, Equatable, Sendable, CustomStringConver
     var usageBarsShowUsed: Bool
     var refreshIntervalMinutes: Int
     var runAtStartup: Bool
+    /// Checks GitHub for a newer published release. The only network request the Windows app makes itself.
+    var checkForUpdates: Bool
     var providers: [WindowsProviderConfiguration]
 
     init(
@@ -250,12 +252,14 @@ struct WindowsAppConfiguration: Codable, Equatable, Sendable, CustomStringConver
         usageBarsShowUsed: Bool = false,
         refreshIntervalMinutes: Int = Self.defaultRefreshIntervalMinutes,
         runAtStartup: Bool = false,
+        checkForUpdates: Bool = true,
         providers: [WindowsProviderConfiguration])
     {
         self.schemaVersion = schemaVersion
         self.usageBarsShowUsed = usageBarsShowUsed
         self.refreshIntervalMinutes = Self.normalizedRefreshIntervalMinutes(refreshIntervalMinutes)
         self.runAtStartup = runAtStartup
+        self.checkForUpdates = checkForUpdates
         self.providers = providers
     }
 
@@ -264,6 +268,7 @@ struct WindowsAppConfiguration: Codable, Equatable, Sendable, CustomStringConver
         case usageBarsShowUsed
         case refreshIntervalMinutes
         case runAtStartup
+        case checkForUpdates
         case providers
     }
 
@@ -276,6 +281,7 @@ struct WindowsAppConfiguration: Codable, Equatable, Sendable, CustomStringConver
             container.decodeIfPresent(Int.self, forKey: .refreshIntervalMinutes)
                 ?? Self.defaultRefreshIntervalMinutes)
         self.runAtStartup = try container.decodeIfPresent(Bool.self, forKey: .runAtStartup) ?? false
+        self.checkForUpdates = try container.decodeIfPresent(Bool.self, forKey: .checkForUpdates) ?? true
         self.providers =
             try container.decodeIfPresent([WindowsProviderConfiguration].self, forKey: .providers) ?? []
         var seenProfiles = Set<WindowsProviderProfileID>()
@@ -345,7 +351,7 @@ struct WindowsAppConfiguration: Codable, Equatable, Sendable, CustomStringConver
     var description: String {
         "WindowsAppConfiguration(schemaVersion: \(self.schemaVersion), usageBarsShowUsed: "
             + "\(self.usageBarsShowUsed), refreshIntervalMinutes: \(self.refreshIntervalMinutes), "
-            + "runAtStartup: \(self.runAtStartup), "
+            + "runAtStartup: \(self.runAtStartup), checkForUpdates: \(self.checkForUpdates), "
             + "providers: \(self.providers.count))"
     }
 
