@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.78.0-windows.6 — 2026-10-23
+
+- Show a download icon next to the pin when a newer release is published; clicking it opens the release page. The app checks GitHub a minute after start and then daily, and Settings has a Check for updates switch.
+
 ## 0.78.0-windows.5 — 2026-10-23
 
 - Show the results of refreshes that take longer than the refresh interval. With a one-minute interval, a refresh slower than a minute used to restart forever without updating the dashboard.
