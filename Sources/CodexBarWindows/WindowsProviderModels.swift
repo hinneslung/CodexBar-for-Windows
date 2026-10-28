@@ -475,6 +475,35 @@ enum WindowsProviderProfilePresentation {
     }
 }
 
+/// Makes a provider error from the CLI safe to display: one line, length-capped, with anything that could be a
+/// credential masked. Upstream messages are written for users, but some include response text or URLs.
+enum WindowsProviderErrorText {
+    static let maximumLength = 300
+    private static let redacted = "[redacted]"
+    private static let rules: [(pattern: String, template: String)] = [
+        (#"(?i)\bbearer\s+\S+"#, "Bearer [redacted]"),
+        (#"\bsk-[A-Za-z0-9_\-]{6,}"#, redacted),
+        (#"(https?://[^\s?#]+)[?#]\S*"#, "$1?[redacted]"),
+        (#"[A-Za-z0-9_\-+=.]{32,}"#, redacted),
+    ]
+
+    static func displaySafe(_ message: String?) -> String? {
+        guard let message else { return nil }
+        var text = message.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+            .joined(separator: " ")
+        guard !text.isEmpty else { return nil }
+        for rule in self.rules {
+            guard let expression = try? NSRegularExpression(pattern: rule.pattern) else { continue }
+            text = expression.stringByReplacingMatches(
+                in: text,
+                range: NSRange(text.startIndex..., in: text),
+                withTemplate: rule.template)
+        }
+        guard text.count > self.maximumLength else { return text }
+        return String(text.prefix(self.maximumLength - 1)).trimmingCharacters(in: .whitespaces) + "…"
+    }
+}
+
 enum WindowsProviderBalanceFormatter {
     static func compact(_ value: String) -> String? {
         let hasRemainingSuffix =

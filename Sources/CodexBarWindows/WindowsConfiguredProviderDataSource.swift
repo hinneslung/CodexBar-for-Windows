@@ -322,47 +322,26 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
         }
         // Provider-specific by design: Stage Codex's home selection so upstream account settings cannot override it.
         if provider.id == .codex, let configuredHome = provider.codexHome {
-            do {
-                let home = try Self.resolveCodexHome(
-                    configuredHome,
-                    distribution: automaticCLI.distribution)
-                let config = try WindowsStagedProviderConfig.encodeCodexHome(home)
-                guard let invocation = await self.stagedInvocation(
-                    resolvedUsageCLI: automaticCLI,
-                    provider: provider.id,
-                    source: "auto",
-                    config: config,
-                    credentialPath: "Automatic",
-                    windowsDirectory: windowsDirectory,
-                    presentsAsAutomatic: true)
-                else {
-                    return Self.credentialFailure(
-                        provider: provider.id,
-                        path: "Automatic",
-                        source: .init(
-                            distributionLabel: automaticCLI.distribution,
-                            kind: .automatic,
-                            isResolved: false),
-                        error: WindowsCanonicalCLIError.executableUnavailable,
-                        authorityCheck: credentialRoute.check)
-                }
-                return await self.cliClient.fetch(
-                    provider: provider.id,
-                    profileID: provider.profileID,
-                    invocation: invocation,
-                    environmentOverrides: [:],
-                    authorityCheck: credentialRoute.check)
-            } catch {
-                return Self.credentialFailure(
-                    provider: provider.id,
-                    path: "Codex home",
-                    source: .init(
-                        distributionLabel: automaticCLI.distribution,
-                        kind: .automatic,
-                        isResolved: false),
-                    error: error,
-                    authorityCheck: credentialRoute.check)
-            }
+            return await self.fetchCodexHome(
+                configuredHome,
+                provider: provider,
+                automaticCLI: automaticCLI,
+                windowsDirectory: windowsDirectory,
+                authorityCheck: credentialRoute.check)
+        }
+        let automaticOverrides: [String: String]
+        do {
+            automaticOverrides = try Self.automaticOverrides(for: provider, distribution: automaticCLI.distribution)
+        } catch {
+            return Self.credentialFailure(
+                provider: provider.id,
+                path: "Claude config folder",
+                source: .init(
+                    distributionLabel: automaticCLI.distribution,
+                    kind: .automatic,
+                    isResolved: false),
+                error: error,
+                authorityCheck: credentialRoute.check)
         }
         let sourceRoute =
             automaticExecutionMode == .usage
@@ -378,7 +357,7 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
                     providerID: provider.id.cliName,
                     sourceRoute: sourceRoute,
                     windowsDirectory: windowsDirectory),
-                environmentOverrides: [:],
+                environmentOverrides: automaticOverrides,
                 authorityCheck: credentialRoute.check)
             if preferred.availability == .available || preferred.discardsRefreshResult {
                 return preferred
@@ -395,7 +374,7 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
             provider: provider.id,
             profileID: provider.profileID,
             invocation: invocation,
-            environmentOverrides: [:],
+            environmentOverrides: automaticOverrides,
             authorityCheck: credentialRoute.check)
     }
 
@@ -459,19 +438,106 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
             presentsAsAutomatic: presentsAsAutomatic)
     }
 
+    private func fetchCodexHome(
+        _ configuredHome: String,
+        provider: WindowsProviderConfiguration,
+        automaticCLI: ResolvedCLI,
+        windowsDirectory: String,
+        authorityCheck: (@Sendable () throws -> Bool)?) async -> WindowsProviderSnapshot
+    {
+        do {
+            let home = try Self.resolveCodexHome(
+                configuredHome,
+                distribution: automaticCLI.distribution)
+            let config = try WindowsStagedProviderConfig.encodeCodexHome(home)
+            guard let invocation = await self.stagedInvocation(
+                resolvedUsageCLI: automaticCLI,
+                provider: provider.id,
+                source: "auto",
+                config: config,
+                credentialPath: "Automatic",
+                windowsDirectory: windowsDirectory,
+                presentsAsAutomatic: true)
+            else {
+                return Self.credentialFailure(
+                    provider: provider.id,
+                    path: "Automatic",
+                    source: .init(
+                        distributionLabel: automaticCLI.distribution,
+                        kind: .automatic,
+                        isResolved: false),
+                    error: WindowsCanonicalCLIError.executableUnavailable,
+                    authorityCheck: authorityCheck)
+            }
+            return await self.cliClient.fetch(
+                provider: provider.id,
+                profileID: provider.profileID,
+                invocation: invocation,
+                environmentOverrides: [:],
+                authorityCheck: authorityCheck)
+        } catch {
+            return Self.credentialFailure(
+                provider: provider.id,
+                path: "Codex home",
+                source: .init(
+                    distributionLabel: automaticCLI.distribution,
+                    kind: .automatic,
+                    isResolved: false),
+                error: error,
+                authorityCheck: authorityCheck)
+        }
+    }
+
+    /// Environment added to an Automatic fetch: a Claude config folder's `CLAUDE_CONFIG_DIR`, when one is set.
+    static func automaticOverrides(
+        for provider: WindowsProviderConfiguration,
+        distribution: String,
+        defaultLinuxHome: (() -> String?)? = nil,
+        directoryExists: ((String) -> Bool)? = nil) throws -> [String: String]
+    {
+        // Provider-specific by design: A Claude config folder selects that folder's Claude Code sign-in.
+        guard provider.id == .claude, let folder = provider.claudeConfigDirectory else { return [:] }
+        let resolved = try Self.resolveSignInFolder(
+            folder,
+            provider: .claude,
+            distribution: distribution,
+            defaultLinuxHome: defaultLinuxHome,
+            directoryExists: directoryExists)
+        return Self.claudeConfigEnvironment(folder: resolved)
+    }
+
     static func resolveCodexHome(
         _ configuredHome: String,
         distribution: String,
         defaultLinuxHome: (() -> String?)? = nil,
         directoryExists: ((String) -> Bool)? = nil) throws -> String
     {
-        guard let normalized = WindowsProviderProfileValidation.normalizedCodexHome(configuredHome) else {
-            throw WindowsStagedProviderConfigError.invalidValue("Codex home")
+        // Provider-specific by design: Codex home is Codex's sign-in folder.
+        try self.resolveSignInFolder(
+            configuredHome,
+            provider: .codex,
+            distribution: distribution,
+            defaultLinuxHome: defaultLinuxHome,
+            directoryExists: directoryExists)
+    }
+
+    /// Expands `~/` with the distribution's default user home and requires the folder to exist there.
+    static func resolveSignInFolder(
+        _ configuredFolder: String,
+        provider: WindowsProviderID,
+        distribution: String,
+        defaultLinuxHome: (() -> String?)? = nil,
+        directoryExists: ((String) -> Bool)? = nil) throws -> String
+    {
+        let field = WindowsProviderSignInFolderField.field(for: provider)
+        let label = field?.label ?? "Sign-in folder"
+        guard let normalized = WindowsProviderProfileValidation.normalizedSignInFolder(configuredFolder) else {
+            throw WindowsStagedProviderConfigError.invalidValue(label)
         }
         let resolved: String
         if normalized.hasPrefix("~/") {
             let base = defaultLinuxHome?() ?? WindowsWSLDefaultUserHome.linuxPath(distributionName: distribution)
-            guard let base else { throw WindowsStagedProviderConfigError.invalidValue("Codex home") }
+            guard let base else { throw WindowsStagedProviderConfigError.invalidValue(label) }
             resolved = base + String(normalized.dropFirst())
         } else {
             resolved = normalized
@@ -482,9 +548,22 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
                 distributionName: distribution)
         guard exists else {
             throw WindowsStagedProviderConfigError.validationRejected(
-                "The configured Codex home was not found in the selected WSL distribution.")
+                field?.missingMessage ?? "The configured \(label) was not found in the selected WSL distribution.")
         }
         return resolved
+    }
+
+    /// Runs Claude Code and the CLI's Claude sources against another config folder, as `CLAUDE_CONFIG_DIR` does.
+    static func claudeConfigEnvironment(
+        folder: String,
+        base: [String: String] = ProcessInfo.processInfo.environment) -> [String: String]
+    {
+        let key = "CLAUDE_CONFIG_DIR"
+        let existing = base.first { $0.key.caseInsensitiveCompare("WSLENV") == .orderedSame }?.value
+        return [
+            key: folder,
+            "WSLENV": WindowsProviderCredentialBridge.mergedWSLEnvironment(existing: existing, adding: [key]),
+        ]
     }
 
     struct ResolvedCLI: Equatable, Sendable {
