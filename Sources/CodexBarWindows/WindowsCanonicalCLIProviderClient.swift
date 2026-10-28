@@ -344,27 +344,9 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
         requestedProvider: WindowsProviderID,
         source: WindowsProviderSourcePresentation) throws -> WindowsProviderSnapshot
     {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .custom(Self.decodeDate)
-        let payloads: [Payload]
-        if let array = try? decoder.decode([Payload].self, from: data) {
-            payloads = array
-        } else if let payload = try? decoder.decode(Payload.self, from: data) {
-            payloads = [payload]
-        } else {
-            throw WindowsCanonicalCLIError.invalidPayload
-        }
-        guard let payload = payloads.first(where: { $0.provider == requestedProvider.rawValue }) else {
-            throw WindowsCanonicalCLIError.providerMismatch
-        }
+        let payload = try Self.payload(data: data, requestedProvider: requestedProvider)
         if let error = payload.error {
-            return WindowsProviderSnapshot(
-                provider: requestedProvider,
-                availability: .error,
-                source: source,
-                safeErrorText: error.message.isEmpty
-                    ? "Provider usage is unavailable."
-                    : "Provider usage is unavailable in the configured CLI source.")
+            return Self.errorSnapshot(error, requestedProvider: requestedProvider, source: source)
         }
         guard payload.usage != nil || payload.credits != nil else {
             throw WindowsCanonicalCLIError.invalidPayload
@@ -444,6 +426,49 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
             detailSections: detailSections)
     }
 
+    /// The provider's own error from a CLI run that exited non-zero, or nil when the output holds no such error.
+    /// The CLI prints the error for the requested provider and then exits with a failure status.
+    static func decodeProviderError(
+        data: Data,
+        requestedProvider: WindowsProviderID,
+        source: WindowsProviderSourcePresentation) -> WindowsProviderSnapshot?
+    {
+        guard let payload = try? Self.payload(data: data, requestedProvider: requestedProvider),
+              let error = payload.error
+        else { return nil }
+        return Self.errorSnapshot(error, requestedProvider: requestedProvider, source: source)
+    }
+
+    private static func payload(data: Data, requestedProvider: WindowsProviderID) throws -> Payload {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom(Self.decodeDate)
+        let payloads: [Payload]
+        if let array = try? decoder.decode([Payload].self, from: data) {
+            payloads = array
+        } else if let payload = try? decoder.decode(Payload.self, from: data) {
+            payloads = [payload]
+        } else {
+            throw WindowsCanonicalCLIError.invalidPayload
+        }
+        guard let payload = payloads.first(where: { $0.provider == requestedProvider.rawValue }) else {
+            throw WindowsCanonicalCLIError.providerMismatch
+        }
+        return payload
+    }
+
+    private static func errorSnapshot(
+        _ error: ErrorPayload,
+        requestedProvider: WindowsProviderID,
+        source: WindowsProviderSourcePresentation) -> WindowsProviderSnapshot
+    {
+        WindowsProviderSnapshot(
+            provider: requestedProvider,
+            availability: .error,
+            source: source,
+            safeErrorText: WindowsProviderErrorText.displaySafe(error.message)
+                ?? "Provider usage is unavailable.")
+    }
+
     static func decode(
         data: Data,
         requestedProvider: WindowsProviderID,
@@ -459,17 +484,24 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
         invocation: WindowsCanonicalCLIInvocation,
         environmentOverrides: [String: String] = [:]) throws -> Data
     {
-        let result = try self.processRunner(
+        let result = try self.execute(invocation: invocation, environmentOverrides: environmentOverrides)
+        guard result.exitCode == 0 else {
+            throw WindowsCanonicalCLIError.commandFailed(result.exitCode)
+        }
+        return result.standardOutput
+    }
+
+    private func execute(
+        invocation: WindowsCanonicalCLIInvocation,
+        environmentOverrides: [String: String]) throws -> WindowsHiddenProcessResult
+    {
+        try self.processRunner(
             invocation.executablePath,
             invocation.arguments,
             invocation.processTimeout,
             Self.maximumOutputBytes,
             environmentOverrides,
             invocation.standardInput)
-        guard result.exitCode == 0 else {
-            throw WindowsCanonicalCLIError.commandFailed(result.exitCode)
-        }
-        return result.standardOutput
     }
 
     private func load(
@@ -521,14 +553,26 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
                 guard try authorityCheck?() ?? true else {
                     throw WindowsCanonicalCLIError.staleCredential
                 }
-                let data = try self.run(
+                let result = try self.execute(
                     invocation: invocation,
                     environmentOverrides: environmentOverrides)
                 guard try authorityCheck?() ?? true else {
                     throw WindowsCanonicalCLIError.staleCredential
                 }
+                guard result.exitCode == 0 else {
+                    // A provider error is reported, not retried; the next refresh tries again.
+                    guard invocation.executionMode == .usage,
+                          let snapshot = Self.decodeProviderError(
+                              data: result.standardOutput,
+                              requestedProvider: provider,
+                              source: invocation.source)
+                    else { throw WindowsCanonicalCLIError.commandFailed(result.exitCode) }
+                    return ProviderAttempt(
+                        snapshot: snapshot.requiringPublicationAuthority(authorityCheck),
+                        shouldRetry: false)
+                }
                 let attempt = try Self.decodeAttempt(
-                    data: data,
+                    data: result.standardOutput,
                     requestedProvider: provider,
                     source: invocation.source,
                     executionMode: invocation.executionMode)
