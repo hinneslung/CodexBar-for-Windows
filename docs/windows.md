@@ -50,6 +50,7 @@
 - Open a provider's settings. **WSL distro** chooses which Linux distribution to use; **Credentials** chooses how to connect your account.
 - Use the copy icon in a profile header to add another account for the same provider. Each profile keeps its own source and CodexBar-saved credential; a name does not switch accounts outside CodexBar. Use the delete icon to immediately delete only that profile and its CodexBar-saved credential.
 - Codex profiles can set **Codex home** to an absolute Linux directory or a path beginning with `~/`. Leave it blank for the default Codex sign-in. The selected WSL distribution must contain that directory.
+- Claude profiles can set **Claude config folder** the same way, to track another Claude account through Automatic. In WSL, run `CLAUDE_CONFIG_DIR=~/.claude-work claude`, sign in with `/login`, then enter `~/.claude-work`. Leave it blank for your default Claude Code sign-in. A Claude **Browser session** can be blocked by Cloudflare outside a browser; the error then says so, and a config folder sign-in is the alternative.
 - Leave **WSL distro** on **Automatic** to let CodexBar find a suitable installed distribution. Choose a name if your sign-in is in a particular distribution.
 - The labels under a provider's name tell you which connection methods it supports. They do not mean you are already signed in.
 - **Provider app/CLI:** use the provider's own app or command-line tool in WSL to sign in or start its service. Then choose **Automatic** in CodexBar. The exact setup depends on the provider.

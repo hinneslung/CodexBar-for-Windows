@@ -364,6 +364,27 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
                     authorityCheck: credentialRoute.check)
             }
         }
+        // Provider-specific by design: A Claude config folder selects that folder's Claude Code sign-in.
+        var automaticEnvironment: [String: String] = [:]
+        if provider.id == .claude, let folder = provider.claudeConfigDirectory {
+            do {
+                let resolved = try Self.resolveSignInFolder(
+                    folder,
+                    provider: .claude,
+                    distribution: automaticCLI.distribution)
+                automaticEnvironment = Self.claudeConfigEnvironment(folder: resolved)
+            } catch {
+                return Self.credentialFailure(
+                    provider: provider.id,
+                    path: "Claude config folder",
+                    source: .init(
+                        distributionLabel: automaticCLI.distribution,
+                        kind: .automatic,
+                        isResolved: false),
+                    error: error,
+                    authorityCheck: credentialRoute.check)
+            }
+        }
         let sourceRoute =
             automaticExecutionMode == .usage
                 ? WindowsProviderConfigurationCatalog.automaticSourceRoutes[provider.id]
@@ -378,7 +399,7 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
                     providerID: provider.id.cliName,
                     sourceRoute: sourceRoute,
                     windowsDirectory: windowsDirectory),
-                environmentOverrides: [:],
+                environmentOverrides: automaticEnvironment,
                 authorityCheck: credentialRoute.check)
             if preferred.availability == .available || preferred.discardsRefreshResult {
                 return preferred
@@ -395,7 +416,7 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
             provider: provider.id,
             profileID: provider.profileID,
             invocation: invocation,
-            environmentOverrides: [:],
+            environmentOverrides: automaticEnvironment,
             authorityCheck: credentialRoute.check)
     }
 
@@ -465,13 +486,31 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
         defaultLinuxHome: (() -> String?)? = nil,
         directoryExists: ((String) -> Bool)? = nil) throws -> String
     {
-        guard let normalized = WindowsProviderProfileValidation.normalizedCodexHome(configuredHome) else {
-            throw WindowsStagedProviderConfigError.invalidValue("Codex home")
+        try self.resolveSignInFolder(
+            configuredHome,
+            provider: .codex,
+            distribution: distribution,
+            defaultLinuxHome: defaultLinuxHome,
+            directoryExists: directoryExists)
+    }
+
+    /// Expands `~/` with the distribution's default user home and requires the folder to exist there.
+    static func resolveSignInFolder(
+        _ configuredFolder: String,
+        provider: WindowsProviderID,
+        distribution: String,
+        defaultLinuxHome: (() -> String?)? = nil,
+        directoryExists: ((String) -> Bool)? = nil) throws -> String
+    {
+        let field = WindowsProviderSignInFolderField.field(for: provider)
+        let label = field?.label ?? "Sign-in folder"
+        guard let normalized = WindowsProviderProfileValidation.normalizedSignInFolder(configuredFolder) else {
+            throw WindowsStagedProviderConfigError.invalidValue(label)
         }
         let resolved: String
         if normalized.hasPrefix("~/") {
             let base = defaultLinuxHome?() ?? WindowsWSLDefaultUserHome.linuxPath(distributionName: distribution)
-            guard let base else { throw WindowsStagedProviderConfigError.invalidValue("Codex home") }
+            guard let base else { throw WindowsStagedProviderConfigError.invalidValue(label) }
             resolved = base + String(normalized.dropFirst())
         } else {
             resolved = normalized
@@ -482,9 +521,22 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
                 distributionName: distribution)
         guard exists else {
             throw WindowsStagedProviderConfigError.validationRejected(
-                "The configured Codex home was not found in the selected WSL distribution.")
+                field?.missingMessage ?? "The configured \(label) was not found in the selected WSL distribution.")
         }
         return resolved
+    }
+
+    /// Runs Claude Code and the CLI's Claude sources against another config folder, as `CLAUDE_CONFIG_DIR` does.
+    static func claudeConfigEnvironment(
+        folder: String,
+        base: [String: String] = ProcessInfo.processInfo.environment) -> [String: String]
+    {
+        let key = "CLAUDE_CONFIG_DIR"
+        let existing = base.first { $0.key.caseInsensitiveCompare("WSLENV") == .orderedSame }?.value
+        return [
+            key: folder,
+            "WSLENV": WindowsProviderCredentialBridge.mergedWSLEnvironment(existing: existing, adding: [key]),
+        ]
     }
 
     struct ResolvedCLI: Equatable, Sendable {

@@ -14,7 +14,7 @@ enum WindowsProviderConfigurationPageState {
     {
         self.sourceKey(draft) != self.sourceKey(saved)
             || draft.profileName != saved.profileName
-            || draft.codexHome != saved.codexHome
+            || draft.signInFolder != saved.signInFolder
     }
 
     // swiftlint:disable:next function_parameter_count

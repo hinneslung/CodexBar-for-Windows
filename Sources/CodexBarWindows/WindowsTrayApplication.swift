@@ -989,7 +989,7 @@ extension WindowsTrayApplication {
             || previous.sourceMode != current.sourceMode
             || previous.wslDistro != current.wslDistro
             || previous.companionValues != current.companionValues
-            || previous.codexHome != current.codexHome
+            || previous.signInFolder != current.signInFolder
     }
 
     @discardableResult

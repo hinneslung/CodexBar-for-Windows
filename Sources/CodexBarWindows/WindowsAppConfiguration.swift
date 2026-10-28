@@ -73,6 +73,11 @@ enum WindowsProviderProfileValidation {
     }
 
     static func normalizedCodexHome(_ value: String?) -> String? {
+        self.normalizedSignInFolder(value)
+    }
+
+    /// An absolute Linux directory, or one under the WSL user's home (`~/`), without command syntax.
+    static func normalizedSignInFolder(_ value: String?) -> String? {
         guard let value else { return nil }
         let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return nil }
@@ -90,6 +95,39 @@ enum WindowsProviderProfileValidation {
         !value.unicodeScalars.contains { scalar in
             CharacterSet.controlCharacters.contains(scalar)
                 || scalar.properties.generalCategory == .format
+        }
+    }
+}
+
+/// The optional per-profile folder where a provider's own sign-in lives (Codex home, Claude config folder).
+struct WindowsProviderSignInFolderField: Equatable, Sendable {
+    let label: String
+    let hint: String
+    let invalidMessage: String
+    let missingMessage: String
+
+    static func field(for provider: WindowsProviderID) -> Self? {
+        switch provider {
+        // Provider-specific by design: Only Codex and Claude read their sign-in from a selectable folder.
+        case .codex:
+            Self(
+                label: "Codex home",
+                hint: "Leave blank to use the default Codex sign-in. Example: ~/.codex-personal",
+                invalidMessage: "Codex home must be an absolute Linux path or start with ~/ and contain no command "
+                    + "syntax.",
+                missingMessage: "The configured Codex home was not found in the selected WSL distribution.")
+        case .claude:
+            Self(
+                label: "Claude config folder",
+                hint: "Used by Automatic. Leave blank for your default Claude Code sign-in. For another account, "
+                    + "run CLAUDE_CONFIG_DIR=~/.claude-work claude in WSL, sign in with /login, then enter "
+                    + "~/.claude-work here.",
+                invalidMessage: "Claude config folder must be an absolute Linux path or start with ~/ and contain "
+                    + "no command syntax.",
+                missingMessage: "The configured Claude config folder was not found in the selected WSL "
+                    + "distribution.")
+        default:
+            nil
         }
     }
 }
@@ -132,6 +170,8 @@ struct WindowsProviderConfiguration: Codable, Equatable, Sendable, CustomStringC
     var wslDistro: String?
     var companionValues: [String: String]
     var codexHome: String?
+    /// Claude Code's `CLAUDE_CONFIG_DIR` for this profile's Automatic route, so it can use another sign-in.
+    var claudeConfigDirectory: String?
 
     init(
         id: WindowsProviderID,
@@ -142,7 +182,8 @@ struct WindowsProviderConfiguration: Codable, Equatable, Sendable, CustomStringC
         sourceMode: WindowsProviderSourceMode = .automatic,
         wslDistro: String? = nil,
         companionValues: [String: String] = [:],
-        codexHome: String? = nil)
+        codexHome: String? = nil,
+        claudeConfigDirectory: String? = nil)
     {
         self.id = id
         self.profileID = profileID ?? .defaultID(for: id)
@@ -160,6 +201,33 @@ struct WindowsProviderConfiguration: Codable, Equatable, Sendable, CustomStringC
         } else {
             self.codexHome = nil
         }
+        // Provider-specific by design: A Claude config folder selects a Claude Code sign-in, not another provider's.
+        if id == .claude, let claudeConfigDirectory {
+            let trimmed = claudeConfigDirectory.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.claudeConfigDirectory = trimmed.isEmpty ? nil : trimmed
+        } else {
+            self.claudeConfigDirectory = nil
+        }
+    }
+
+    /// The Linux folder holding this profile's own provider sign-in, for providers that support one.
+    var signInFolder: String? {
+        get {
+            switch self.id {
+            case .codex: self.codexHome
+            case .claude: self.claudeConfigDirectory
+            default: nil
+            }
+        }
+        set {
+            let value = newValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let folder = value?.isEmpty == false ? value : nil
+            switch self.id {
+            case .codex: self.codexHome = folder
+            case .claude: self.claudeConfigDirectory = folder
+            default: break
+            }
+        }
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -172,6 +240,7 @@ struct WindowsProviderConfiguration: Codable, Equatable, Sendable, CustomStringC
         case wslDistro
         case companionValues
         case codexHome
+        case claudeConfigDirectory
     }
 
     init(from decoder: Decoder) throws {
@@ -208,6 +277,17 @@ struct WindowsProviderConfiguration: Codable, Equatable, Sendable, CustomStringC
         // Provider-specific by design: Restore Codex home only for Codex; other profiles must not inherit its scope.
         self.codexHome = self.id == .codex
             ? WindowsProviderProfileValidation.normalizedCodexHome(decodedCodexHome)
+            : nil
+        let decodedClaudeFolder = try container.decodeIfPresent(String.self, forKey: .claudeConfigDirectory)
+        if let decodedClaudeFolder,
+           WindowsProviderProfileValidation.normalizedSignInFolder(decodedClaudeFolder) == nil,
+           !decodedClaudeFolder.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            throw DecodingError.dataCorruptedError(
+                forKey: .claudeConfigDirectory, in: container, debugDescription: "Invalid Claude config folder")
+        }
+        self.claudeConfigDirectory = self.id == .claude
+            ? WindowsProviderProfileValidation.normalizedSignInFolder(decodedClaudeFolder)
             : nil
     }
 
