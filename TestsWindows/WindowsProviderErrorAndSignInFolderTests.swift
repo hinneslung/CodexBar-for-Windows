@@ -211,6 +211,41 @@ struct WindowsProviderErrorAndSignInFolderTests {
     }
 
     @Test
+    func `only a Claude profile with a config folder adds CLAUDE_CONFIG_DIR to Automatic`() throws {
+        let folder = WindowsProviderConfiguration(
+            id: .claude,
+            enabled: true,
+            order: 0,
+            claudeConfigDirectory: "~/.claude-work")
+        let overrides = try WindowsConfiguredProviderDataSource.automaticOverrides(
+            for: folder,
+            distribution: "Ubuntu",
+            defaultLinuxHome: { "/home/me" },
+            directoryExists: { _ in true })
+        #expect(overrides["CLAUDE_CONFIG_DIR"] == "/home/me/.claude-work")
+        #expect(overrides["WSLENV"]?.split(separator: ":").contains("CLAUDE_CONFIG_DIR") == true)
+
+        for provider in [
+            WindowsProviderConfiguration(id: .claude, enabled: true, order: 0),
+            WindowsProviderConfiguration(id: .codex, enabled: true, order: 0, codexHome: "~/.codex-work"),
+        ] {
+            let none = try WindowsConfiguredProviderDataSource.automaticOverrides(
+                for: provider,
+                distribution: "Ubuntu",
+                defaultLinuxHome: { "/home/me" },
+                directoryExists: { _ in true })
+            #expect(none.isEmpty)
+        }
+        #expect(throws: WindowsStagedProviderConfigError.self) {
+            try WindowsConfiguredProviderDataSource.automaticOverrides(
+                for: folder,
+                distribution: "Ubuntu",
+                defaultLinuxHome: { "/home/me" },
+                directoryExists: { _ in false })
+        }
+    }
+
+    @Test
     func `changing a sign-in folder counts as an unsaved change`() {
         let saved = WindowsProviderConfiguration(id: .claude, enabled: true, order: 0)
         var draft = saved
