@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.78.0-windows.7 — 2026-10-28
+
+- Show the provider's own error when a refresh fails, instead of the CLI's exit code or generic text, with credentials masked.
+- Add a Claude config folder per Claude profile, so a second Claude account signed in with `CLAUDE_CONFIG_DIR` is tracked through Automatic.
+
 ## 0.78.0-windows.6 — 2026-10-23
 
 - Show a download icon next to the pin when a newer release is published; clicking it opens the release page. The app checks GitHub a minute after start and then daily, and Settings has a Check for updates switch.
