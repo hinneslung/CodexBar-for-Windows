@@ -71,6 +71,67 @@ struct WindowsCanonicalCLIProviderClientTests {
     }
 
     @Test
+    func `antigravity quota buckets replace the family summary rows and name argon`() throws {
+        let snapshot = try Self.decodeAntigravity(extras: [
+            Self.antigravityBucket("gemini-5h", "Gemini 5-hour", used: 2),
+            Self.antigravityBucket("gemini-weekly", "Gemini weekly", used: 2),
+            Self.antigravityBucket("gemini-argon-wtu-weekly", "Gemini weekly", used: 19),
+            Self.antigravityBucket("3p-5h", "Claude/GPT 5-hour", used: 0),
+            Self.antigravityBucket("3p-weekly", "Claude/GPT weekly", used: 0),
+        ])
+
+        #expect(snapshot.windows.map(\.label) == [
+            "Gemini 5-hour", "Gemini weekly", "Gemini Argon weekly", "Claude/GPT 5-hour", "Claude/GPT weekly",
+        ])
+        #expect(snapshot.windows.map(\.usedPercent) == [2, 2, 19, 0, 0])
+    }
+
+    @Test
+    func `antigravity keeps an argon title the CLI already provides`() throws {
+        let snapshot = try Self.decodeAntigravity(extras: [
+            Self.antigravityBucket("gemini-argon-wtu-weekly", "Gemini 4 Argon weekly", used: 19),
+            Self.antigravityBucket("argon-5h", "5-hour", used: 4),
+        ])
+
+        #expect(snapshot.windows.map(\.label) == ["Gemini 4 Argon weekly", "Gemini Argon 5-hour"])
+    }
+
+    @Test
+    func `antigravity without quota buckets keeps its standard windows`() throws {
+        let unknownBucket = #"""
+        {"id":"antigravity-quota-summary-gemini-weekly","title":"Gemini weekly","usageKnown":false,
+         "window":{"usedPercent":0}}
+        """#
+        let legacy = #"{"id":"claude","title":"Claude","window":{"usedPercent":30}}"#
+        let snapshot = try Self.decodeAntigravity(extras: [unknownBucket, legacy])
+
+        #expect(snapshot.windows.map(\.label) == ["Gemini Models", "Claude and GPT", "Claude"])
+    }
+
+    private static func antigravityBucket(_ bucketID: String, _ title: String, used: Int) -> String {
+        let id = "antigravity-quota-summary-\(bucketID)"
+        return #"{"id":"\#(id)","title":"\#(title)","usageKnown":true,"window":{"usedPercent":\#(used)}}"#
+    }
+
+    private static func decodeAntigravity(extras: [String]) throws -> WindowsProviderSnapshot {
+        let payload = #"""
+        [{
+          "provider":"antigravity",
+          "rateWindowLabels":{"primary":"Gemini Models","secondary":"Claude and GPT"},
+          "usage":{
+            "primary":{"usedPercent":19,"windowMinutes":10080},
+            "secondary":{"usedPercent":0,"windowMinutes":300},
+            "extraRateWindows":[\#(extras.joined(separator: ","))]
+          }
+        }]
+        """#
+        return try WindowsCanonicalCLIProviderClient.decode(
+            data: Data(payload.utf8),
+            requestedProvider: .antigravity,
+            sourceText: "WSL CLI · Ubuntu")
+    }
+
+    @Test
     func `provider cost balances show as a remaining amount without overriding credits`() throws {
         let window = #""primary":{"usedPercent":10}"#
         let cost = { (fields: String) in #","providerCost":{"used":0,"limit":0,\#(fields)}"# }
