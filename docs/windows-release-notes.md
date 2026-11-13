@@ -1,27 +1,22 @@
-# CodexBar for Windows v0.78.0-windows.7
+# CodexBar for Windows v0.78.0-windows.8
 
 Windows-fork update, still based on upstream CodexBar v0.78.0. The bundled CLI is unchanged.
 
-- Failed refreshes now show the provider's own reason, such as a Cloudflare challenge on claude.ai or missing
-  credentials, instead of "stopped with exit code 1" or a generic message. Anything that could be a credential is
-  masked.
-- Claude profiles can set a **Claude config folder** to track another Claude account through Automatic. In WSL,
-  run `CLAUDE_CONFIG_DIR=~/.claude-work claude`, sign in with `/login`, then enter `~/.claude-work` in the profile.
-  This uses Claude Code's OAuth sign-in, which works where a Claude browser session is blocked by Cloudflare.
-
-Earlier versions do not know the Claude config folder setting and drop it if they save the configuration. If you
-run an older build again, re-enter the folder after upgrading.
+- Antigravity lists each quota once. The **Gemini Models** and **Claude and GPT** rows, which only repeated the
+  most-used limit in each group, are gone; the detail view shows each 5-hour and weekly limit on its own row.
+- The separate Gemini 4 Argon weekly limit is now labeled **Gemini Argon weekly** instead of appearing as a second
+  **Gemini weekly** row with a different value.
 
 ## Download and install
 
-- Intel/AMD Windows: `CodexBar-v0.78.0-windows.7-windows-x86_64-setup.exe`.
-- Windows on ARM: `CodexBar-v0.78.0-windows.7-windows-arm64-setup.exe`.
+- Intel/AMD Windows: `CodexBar-v0.78.0-windows.8-windows-x86_64-setup.exe`.
+- Windows on ARM: `CodexBar-v0.78.0-windows.8-windows-arm64-setup.exe`.
 - Portable packages use the same names without `-setup.exe`, ending in `.zip` instead.
 
 Requires Windows 10/11 and WSL2 with a configured distribution and non-root default user.
 Install the EXE and open CodexBar from the Start menu, or extract the entire portable ZIP and run
 `CodexBar.exe`. Enable and configure providers in Settings. See the
-[Windows guide](https://github.com/hinneslung/CodexBar-for-Windows/blob/v0.78.0-windows.7/docs/windows.md).
+[Windows guide](https://github.com/hinneslung/CodexBar-for-Windows/blob/v0.78.0-windows.8/docs/windows.md).
 
 The matching Linux CLI and runtime libraries are bundled. No separate CLI installation is needed.
 Upgrades preserve your profiles, application settings, and saved credentials.
@@ -41,9 +36,10 @@ Upgrades preserve your profiles, application settings, and saved credentials.
 ## Validation
 
 Windows x64 and ARM64 passed native tests, packaging and installer checks in CI, along with upstream's macOS
-test suite. A release-candidate package was smoke-tested on a real WSL Ubuntu setup: a second Claude profile with
-its own config folder loaded a different account over OAuth, a profile pointed at an empty folder showed the CLI's
-own error instead of the default account, and the bundled CLI was confirmed to read `CLAUDE_CONFIG_DIR` from WSL.
+test suite. The change was smoke-tested on a real WSL Ubuntu setup with `agy` 1.5.8: the Antigravity detail view
+listed Gemini 5-hour, Gemini weekly, Gemini Argon weekly, Claude/GPT 5-hour and Claude/GPT weekly, and the Argon
+row matched the `gemini-argon-wtu-weekly` bucket reported by `agy -p /usage --output-format json`. The
+release-candidate installer was also installed and checked on that setup.
 
-Implemented in [PR #26](https://github.com/hinneslung/CodexBar-for-Windows/pull/26).
+Implemented in [PR #28](https://github.com/hinneslung/CodexBar-for-Windows/pull/28).
 Published assets appear as the release workflow jobs complete.
