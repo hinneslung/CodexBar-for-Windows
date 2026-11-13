@@ -376,6 +376,7 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
                 to: &windows)
         }
         for extra in extras {
+            // Provider-specific by design: only Antigravity folds a separate allowance into another bucket's title.
             let title = requestedProvider == .antigravity ? Self.antigravityBucketTitle(extra) : extra.title
             Self.append(extra.window, defaultLabel: title, to: &windows)
         }
