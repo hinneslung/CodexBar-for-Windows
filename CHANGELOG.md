@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.78.0-windows.8 — 2026-11-14
+
+- Antigravity shows each quota limit once, without the repeated Gemini Models and Claude and GPT summary rows, and labels the separate Argon limit as Gemini Argon weekly.
+
 ## 0.78.0-windows.7 — 2026-10-28
 
 - Show the provider's own error when a refresh fails, instead of the CLI's exit code or generic text, with credentials masked.
