@@ -678,14 +678,14 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
     private static let antigravityQuotaBucketPrefix = "antigravity-quota-summary-"
 
     private static func isAntigravityQuotaBucket(_ id: String?) -> Bool {
-        id?.hasPrefix(Self.antigravityQuotaBucketPrefix) == true
+        id?.hasPrefix(self.antigravityQuotaBucketPrefix) == true
     }
 
     /// The CLI titles Antigravity's separate Argon allowance as a second `Gemini weekly`, because the group name
     /// contains "Gemini". Its bucket id still names Argon, so that row is relabeled from the id.
     private static func antigravityBucketTitle(_ extra: NamedRateWindow) -> String {
-        guard let id = extra.id, Self.isAntigravityQuotaBucket(id),
-              id.dropFirst(Self.antigravityQuotaBucketPrefix.count).lowercased().contains("argon"),
+        guard let id = extra.id, self.isAntigravityQuotaBucket(id),
+              id.dropFirst(self.antigravityQuotaBucketPrefix.count).lowercased().contains("argon"),
               !extra.title.lowercased().contains("argon")
         else { return extra.title }
         let geminiPrefix = "gemini "
