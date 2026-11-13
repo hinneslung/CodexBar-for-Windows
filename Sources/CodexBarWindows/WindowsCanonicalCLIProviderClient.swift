@@ -356,20 +356,28 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
         // Labels are matched to their slot before absent windows are skipped, so a secondary-only reading
         // cannot inherit the primary label. Older CLIs omit the labels and keep the generic names.
         let labels = payload.rateWindowLabels
-        Self.append(
-            payload.usage?.primary,
-            defaultLabel: Self.normalized(labels?.primary) ?? "Session",
-            to: &windows)
-        Self.append(
-            payload.usage?.secondary,
-            defaultLabel: Self.normalized(labels?.secondary) ?? "Weekly",
-            to: &windows)
-        Self.append(
-            payload.usage?.tertiary,
-            defaultLabel: Self.normalized(labels?.tertiary) ?? "Monthly",
-            to: &windows)
-        for extra in payload.usage?.extraRateWindows ?? [] where extra.usageKnown != false {
-            Self.append(extra.window, defaultLabel: extra.title, to: &windows)
+        let extras = (payload.usage?.extraRateWindows ?? []).filter { $0.usageKnown != false }
+        // Provider-specific by design: Antigravity's standard windows only repeat its most-used quota buckets
+        // under family names, so its per-bucket rows replace them.
+        let showsStandardWindows = requestedProvider != .antigravity
+            || !extras.contains { Self.isAntigravityQuotaBucket($0.id) }
+        if showsStandardWindows {
+            Self.append(
+                payload.usage?.primary,
+                defaultLabel: Self.normalized(labels?.primary) ?? "Session",
+                to: &windows)
+            Self.append(
+                payload.usage?.secondary,
+                defaultLabel: Self.normalized(labels?.secondary) ?? "Weekly",
+                to: &windows)
+            Self.append(
+                payload.usage?.tertiary,
+                defaultLabel: Self.normalized(labels?.tertiary) ?? "Monthly",
+                to: &windows)
+        }
+        for extra in extras {
+            let title = requestedProvider == .antigravity ? Self.antigravityBucketTitle(extra) : extra.title
+            Self.append(extra.window, defaultLabel: title, to: &windows)
         }
         var balanceText = payload.credits.flatMap { credits -> String? in
             guard credits.balanceReadSucceeded != false else { return nil }
@@ -667,6 +675,24 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
         value.caseInsensitiveCompare("codexbar") == .orderedSame
     }
 
+    private static let antigravityQuotaBucketPrefix = "antigravity-quota-summary-"
+
+    private static func isAntigravityQuotaBucket(_ id: String?) -> Bool {
+        id?.hasPrefix(Self.antigravityQuotaBucketPrefix) == true
+    }
+
+    /// The CLI titles Antigravity's separate Argon allowance as a second `Gemini weekly`, because the group name
+    /// contains "Gemini". Its bucket id still names Argon, so that row is relabeled from the id.
+    private static func antigravityBucketTitle(_ extra: NamedRateWindow) -> String {
+        guard let id = extra.id, Self.isAntigravityQuotaBucket(id),
+              id.dropFirst(Self.antigravityQuotaBucketPrefix.count).lowercased().contains("argon"),
+              !extra.title.lowercased().contains("argon")
+        else { return extra.title }
+        let geminiPrefix = "gemini "
+        guard extra.title.lowercased().hasPrefix(geminiPrefix) else { return "Gemini Argon \(extra.title)" }
+        return "Gemini Argon \(extra.title.dropFirst(geminiPrefix.count))"
+    }
+
     private static func append(
         _ window: RateWindow?,
         defaultLabel: String,
@@ -929,6 +955,7 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
     }
 
     private struct NamedRateWindow: Decodable {
+        let id: String?
         let title: String
         let window: RateWindow
         let usageKnown: Bool?
