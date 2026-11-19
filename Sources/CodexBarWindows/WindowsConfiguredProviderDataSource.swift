@@ -91,6 +91,7 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
     private let cliClient: WindowsCanonicalCLIProviderClient
     private let cliDiscoveryCache: WindowsCanonicalCLIDiscoveryCache
     private let bundledCLIDiscoveryCache: WindowsCanonicalCLIDiscoveryCache
+    private let agyDiscoveryCache: WindowsCanonicalCLIDiscoveryCache
     private let credentialBridge: WindowsProviderCredentialBridge
     private let credentialRouteResolver: WindowsProviderCredentialRouteResolver
 
@@ -107,6 +108,12 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
                         windowsDirectory: windowsDirectory)
                 }.value
             }),
+        agyDiscoveryCache: WindowsCanonicalCLIDiscoveryCache = WindowsCanonicalCLIDiscoveryCache(
+            resolver: { distribution, windowsDirectory in
+                await WindowsCanonicalCLIProviderClient().discoverWSLAgyPath(
+                    distribution: distribution,
+                    windowsDirectory: windowsDirectory)
+            }),
         cliClient: WindowsCanonicalCLIProviderClient = WindowsCanonicalCLIProviderClient(),
         credentialBridge: WindowsProviderCredentialBridge = WindowsProviderCredentialBridge(),
         credentialVault: WindowsProviderCredentialVault? = try? WindowsProviderCredentialVault(),
@@ -117,6 +124,7 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
         self.wslDistributions = wslDistributions ?? WindowsWSLDistributionRegistry.names()
         self.cliDiscoveryCache = cliDiscoveryCache
         self.bundledCLIDiscoveryCache = bundledCLIDiscoveryCache
+        self.agyDiscoveryCache = agyDiscoveryCache
         self.cliClient = cliClient
         self.credentialBridge = credentialBridge
         self.credentialRouteResolver =
@@ -330,12 +338,21 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
                 authorityCheck: credentialRoute.check)
         }
         let automaticOverrides: [String: String]
+        let linuxEnvironment: [String]
         do {
             automaticOverrides = try Self.automaticOverrides(for: provider, distribution: automaticCLI.distribution)
+            linuxEnvironment = try await Self.automaticLinuxEnvironment(
+                for: provider,
+                distribution: automaticCLI.distribution,
+                agyPath: {
+                    await self.agyDiscoveryCache.executablePath(
+                        distribution: automaticCLI.distribution,
+                        windowsDirectory: windowsDirectory)
+                })
         } catch {
             return Self.credentialFailure(
                 provider: provider.id,
-                path: "Claude config folder",
+                path: WindowsProviderSignInFolderField.field(for: provider.id)?.label ?? "Sign-in folder",
                 source: .init(
                     distributionLabel: automaticCLI.distribution,
                     kind: .automatic,
@@ -356,7 +373,8 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
                     executablePath: automaticCLI.executablePath,
                     providerID: provider.id.cliName,
                     sourceRoute: sourceRoute,
-                    windowsDirectory: windowsDirectory),
+                    windowsDirectory: windowsDirectory)
+                    .prefixingLinuxEnvironment(linuxEnvironment),
                 environmentOverrides: automaticOverrides,
                 authorityCheck: credentialRoute.check)
             if preferred.availability == .available || preferred.discardsRefreshResult {
@@ -370,6 +388,7 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
             executionMode: automaticExecutionMode,
             sourceRoute: sourceRoute?.fallsBackToAutomatic == false ? sourceRoute : nil,
             windowsDirectory: windowsDirectory)
+            .prefixingLinuxEnvironment(linuxEnvironment)
         return await self.cliClient.fetch(
             provider: provider.id,
             profileID: provider.profileID,
@@ -504,6 +523,32 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
             defaultLinuxHome: defaultLinuxHome,
             directoryExists: directoryExists)
         return Self.claudeConfigEnvironment(folder: resolved)
+    }
+
+    /// `NAME=value` assignments set inside Linux for an Automatic fetch: an Antigravity home's `HOME`, when one is set.
+    static func automaticLinuxEnvironment(
+        for provider: WindowsProviderConfiguration,
+        distribution: String,
+        agyPath: () async -> String?,
+        defaultLinuxHome: (() -> String?)? = nil,
+        directoryExists: ((String) -> Bool)? = nil) async throws -> [String]
+    {
+        // Provider-specific by design: agy has no sign-in folder setting and keeps its sign-in under HOME.
+        guard provider.id == .antigravity, let folder = provider.antigravityHome else { return [] }
+        let resolved = try Self.resolveSignInFolder(
+            folder,
+            provider: .antigravity,
+            distribution: distribution,
+            defaultLinuxHome: defaultLinuxHome,
+            directoryExists: directoryExists)
+        let discoveredAgyPath = await agyPath()
+        return Self.antigravityHomeEnvironment(home: resolved, agyPath: discoveredAgyPath)
+    }
+
+    /// Runs the CLI and the agy it starts with another home, so agy reads that folder's sign-in. The other home has
+    /// none of the user's shell startup files, so agy's real path is passed as the CLI's `ANTIGRAVITY_CLI_PATH`.
+    static func antigravityHomeEnvironment(home: String, agyPath: String?) -> [String] {
+        ["HOME=\(home)"] + (agyPath.map { ["ANTIGRAVITY_CLI_PATH=\($0)"] } ?? [])
     }
 
     static func resolveCodexHome(
