@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.78.0-windows.9 — 2026-11-19
+
+- Add an Antigravity home per Antigravity profile, so a second Google account signed in with `HOME=<folder> agy` is tracked through Automatic.
+
 ## 0.78.0-windows.8 — 2026-11-14
 
 - Antigravity shows each quota limit once, without the repeated Gemini Models and Claude and GPT summary rows, and labels the separate Argon limit as Gemini Argon weekly.
