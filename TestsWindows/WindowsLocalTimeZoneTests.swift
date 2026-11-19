@@ -50,12 +50,10 @@ struct WindowsLocalTimeZoneTests {
         let now = try #require(ISO8601DateFormatter().date(from: "2026-11-19T08:30:00Z"))
         let singapore = try #require(TimeZone(identifier: "Asia/Singapore"))
         let gmt = try #require(TimeZone(identifier: "GMT"))
+        let hongKong = try #require(TimeZone(identifier: "Asia/Hong_Kong"))
         #expect(WindowsLocalTimeZone.needsOverride(resolved: singapore, foundation: gmt, now: now))
         #expect(!WindowsLocalTimeZone.needsOverride(resolved: gmt, foundation: gmt, now: now))
-        #expect(!WindowsLocalTimeZone.needsOverride(
-            resolved: singapore,
-            foundation: try #require(TimeZone(identifier: "Asia/Hong_Kong")),
-            now: now))
+        #expect(!WindowsLocalTimeZone.needsOverride(resolved: singapore, foundation: hongKong, now: now))
     }
 
     #if os(Windows)
