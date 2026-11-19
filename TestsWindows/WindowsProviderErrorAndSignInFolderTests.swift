@@ -351,9 +351,9 @@ struct WindowsProviderErrorAndSignInFolderTests {
 
     @Test
     func `agy discovery accepts only an absolute agy path`() {
+        let discovered = Data("noise\n/home/linuxbrew/.linuxbrew/bin/agy\n".utf8)
         #expect(
-            WindowsCanonicalCLIProviderClient.discoveredAgyPath(Data("noise\n/home/linuxbrew/.linuxbrew/bin/agy\n".utf8))
-                == "/home/linuxbrew/.linuxbrew/bin/agy")
+            WindowsCanonicalCLIProviderClient.discoveredAgyPath(discovered) == "/home/linuxbrew/.linuxbrew/bin/agy")
         for output in ["", "agy: aliased to npx agy\n", "/usr/bin/codexbar\n", "/tmp/a;b/agy\n"] {
             #expect(WindowsCanonicalCLIProviderClient.discoveredAgyPath(Data(output.utf8)) == nil)
         }

@@ -541,7 +541,8 @@ struct WindowsConfiguredProviderDataSource: WindowsProviderDataSource, Sendable 
             distribution: distribution,
             defaultLinuxHome: defaultLinuxHome,
             directoryExists: directoryExists)
-        return Self.antigravityHomeEnvironment(home: resolved, agyPath: await agyPath())
+        let discoveredAgyPath = await agyPath()
+        return Self.antigravityHomeEnvironment(home: resolved, agyPath: discoveredAgyPath)
     }
 
     /// Runs the CLI and the agy it starts with another home, so agy reads that folder's sign-in. The other home has
