@@ -1,25 +1,21 @@
-# CodexBar for Windows v0.78.0-windows.9
+# CodexBar for Windows v0.78.0-windows.10
 
 Windows-fork update, still based on upstream CodexBar v0.78.0. The bundled CLI is unchanged.
 
-- Antigravity profiles can set an **Antigravity home** to track another Google account through Automatic, like
-  **Codex home** and **Claude config folder**. In WSL, run `HOME=~/.antigravity-work agy` and sign in, then enter
-  `~/.antigravity-work` in the profile. `agy` has no setting for its sign-in folder, so CodexBar runs it with that
-  folder as its home, and finds `agy` with your real home first.
-
-Earlier versions do not know the Antigravity home setting and drop it if they save the configuration. If you run an
-older build again, re-enter the folder after upgrading.
+- Reset times more than a day away now use your Windows time zone. In some time zones, such as Singapore Standard
+  Time (UTC+8), CodexBar showed them in UTC, so a reset at 14:22 local time appeared as 06:22. Countdowns under a day
+  were already correct.
 
 ## Download and install
 
-- Intel/AMD Windows: `CodexBar-v0.78.0-windows.9-windows-x86_64-setup.exe`.
-- Windows on ARM: `CodexBar-v0.78.0-windows.9-windows-arm64-setup.exe`.
+- Intel/AMD Windows: `CodexBar-v0.78.0-windows.10-windows-x86_64-setup.exe`.
+- Windows on ARM: `CodexBar-v0.78.0-windows.10-windows-arm64-setup.exe`.
 - Portable packages use the same names without `-setup.exe`, ending in `.zip` instead.
 
 Requires Windows 10/11 and WSL2 with a configured distribution and non-root default user.
 Install the EXE and open CodexBar from the Start menu, or extract the entire portable ZIP and run
 `CodexBar.exe`. Enable and configure providers in Settings. See the
-[Windows guide](https://github.com/hinneslung/CodexBar-for-Windows/blob/v0.78.0-windows.9/docs/windows.md).
+[Windows guide](https://github.com/hinneslung/CodexBar-for-Windows/blob/v0.78.0-windows.10/docs/windows.md).
 
 The matching Linux CLI and runtime libraries are bundled. No separate CLI installation is needed.
 Upgrades preserve your profiles, application settings, and saved credentials.
@@ -39,9 +35,9 @@ Upgrades preserve your profiles, application settings, and saved credentials.
 ## Validation
 
 Windows x64 and ARM64 passed native tests, packaging and installer checks in CI, along with upstream's macOS
-test suite. The change was smoke-tested on a real WSL Ubuntu setup with `agy` 1.5.9: a second Antigravity profile
-with its own home folder showed a different Google account's limits from the default profile, both through the
-bundled CLI.
+test suite. On a Windows setup in Singapore Standard Time, the app's time zone changed from GMT to Asia/Singapore,
+and a reset at 06:22 UTC was labeled Thu 14:22. The release-candidate installer showed the corrected reset times
+on that setup, and its packaged app started on CI's x64 and ARM64 runners, including the UTC-based x64 runner.
 
-Implemented in [PR #30](https://github.com/hinneslung/CodexBar-for-Windows/pull/30).
+Implemented in [PR #32](https://github.com/hinneslung/CodexBar-for-Windows/pull/32).
 Published assets appear as the release workflow jobs complete.

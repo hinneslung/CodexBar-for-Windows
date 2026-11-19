@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.78.0-windows.10 — 2026-11-19
+
+- Show reset times in the Windows time zone. Zones such as Singapore Standard Time were shown in UTC.
+
 ## 0.78.0-windows.9 — 2026-11-19
 
 - Add an Antigravity home per Antigravity profile, so a second Google account signed in with `HOME=<folder> agy` is tracked through Automatic.
