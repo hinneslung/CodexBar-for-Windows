@@ -1,22 +1,25 @@
-# CodexBar for Windows v0.78.0-windows.8
+# CodexBar for Windows v0.78.0-windows.9
 
 Windows-fork update, still based on upstream CodexBar v0.78.0. The bundled CLI is unchanged.
 
-- Antigravity lists each quota once. The **Gemini Models** and **Claude and GPT** rows, which only repeated the
-  most-used limit in each group, are gone; the detail view shows each 5-hour and weekly limit on its own row.
-- The separate Gemini 4 Argon weekly limit is now labeled **Gemini Argon weekly** instead of appearing as a second
-  **Gemini weekly** row with a different value.
+- Antigravity profiles can set an **Antigravity home** to track another Google account through Automatic, like
+  **Codex home** and **Claude config folder**. In WSL, run `HOME=~/.antigravity-work agy` and sign in, then enter
+  `~/.antigravity-work` in the profile. `agy` has no setting for its sign-in folder, so CodexBar runs it with that
+  folder as its home, and finds `agy` with your real home first.
+
+Earlier versions do not know the Antigravity home setting and drop it if they save the configuration. If you run an
+older build again, re-enter the folder after upgrading.
 
 ## Download and install
 
-- Intel/AMD Windows: `CodexBar-v0.78.0-windows.8-windows-x86_64-setup.exe`.
-- Windows on ARM: `CodexBar-v0.78.0-windows.8-windows-arm64-setup.exe`.
+- Intel/AMD Windows: `CodexBar-v0.78.0-windows.9-windows-x86_64-setup.exe`.
+- Windows on ARM: `CodexBar-v0.78.0-windows.9-windows-arm64-setup.exe`.
 - Portable packages use the same names without `-setup.exe`, ending in `.zip` instead.
 
 Requires Windows 10/11 and WSL2 with a configured distribution and non-root default user.
 Install the EXE and open CodexBar from the Start menu, or extract the entire portable ZIP and run
 `CodexBar.exe`. Enable and configure providers in Settings. See the
-[Windows guide](https://github.com/hinneslung/CodexBar-for-Windows/blob/v0.78.0-windows.8/docs/windows.md).
+[Windows guide](https://github.com/hinneslung/CodexBar-for-Windows/blob/v0.78.0-windows.9/docs/windows.md).
 
 The matching Linux CLI and runtime libraries are bundled. No separate CLI installation is needed.
 Upgrades preserve your profiles, application settings, and saved credentials.
@@ -36,10 +39,9 @@ Upgrades preserve your profiles, application settings, and saved credentials.
 ## Validation
 
 Windows x64 and ARM64 passed native tests, packaging and installer checks in CI, along with upstream's macOS
-test suite. The change was smoke-tested on a real WSL Ubuntu setup with `agy` 1.5.8: the Antigravity detail view
-listed Gemini 5-hour, Gemini weekly, Gemini Argon weekly, Claude/GPT 5-hour and Claude/GPT weekly, and the Argon
-row matched the `gemini-argon-wtu-weekly` bucket reported by `agy -p /usage --output-format json`. The
-release-candidate installer was also installed and checked on that setup.
+test suite. The change was smoke-tested on a real WSL Ubuntu setup with `agy` 1.5.9: a second Antigravity profile
+with its own home folder showed a different Google account's limits from the default profile, both through the
+bundled CLI.
 
-Implemented in [PR #28](https://github.com/hinneslung/CodexBar-for-Windows/pull/28).
+Implemented in [PR #30](https://github.com/hinneslung/CodexBar-for-Windows/pull/30).
 Published assets appear as the release workflow jobs complete.
