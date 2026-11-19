@@ -36,7 +36,8 @@ Upgrades preserve your profiles, application settings, and saved credentials.
 
 Windows x64 and ARM64 passed native tests, packaging and installer checks in CI, along with upstream's macOS
 test suite. On a Windows setup in Singapore Standard Time, the app's time zone changed from GMT to Asia/Singapore,
-and a reset at 06:22 UTC was labeled Thu 14:22.
+and a reset at 06:22 UTC was labeled Thu 14:22. The release-candidate installer showed the corrected reset times on that
+setup, and its packaged app started on CI's UTC-based x64 and ARM64 runners.
 
 Implemented in [PR #32](https://github.com/hinneslung/CodexBar-for-Windows/pull/32).
 Published assets appear as the release workflow jobs complete.
