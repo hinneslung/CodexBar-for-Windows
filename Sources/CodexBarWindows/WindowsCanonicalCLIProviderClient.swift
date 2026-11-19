@@ -156,6 +156,25 @@ struct WindowsCanonicalCLIInvocation: Equatable, Sendable, CustomStringConvertib
             timeoutOverride: isFastFirstAttempt ? Self.preferredSourceProcessTimeout : nil)
     }
 
+    /// Runs the WSL command through `/usr/bin/env` with the given `NAME=value` assignments. WSL resets `HOME` when it
+    /// starts, so a value forwarded from Windows through `WSLENV` cannot replace it; it must be set inside Linux.
+    func prefixingLinuxEnvironment(_ assignments: [String]) -> Self {
+        guard !assignments.isEmpty, self.usesWSL,
+              let separator = self.arguments.firstIndex(of: "--")
+        else { return self }
+        var arguments = self.arguments
+        arguments.insert(contentsOf: ["/usr/bin/env"] + assignments, at: separator + 1)
+        return Self(
+            executablePath: self.executablePath,
+            arguments: arguments,
+            source: self.source,
+            distribution: self.distribution,
+            standardInput: self.standardInput,
+            allowsRetry: self.allowsRetry,
+            executionMode: self.executionMode,
+            timeoutOverride: self.timeoutOverride)
+    }
+
     // swiftlint:disable:next function_parameter_count
     static func stagedWSL(
         distribution: String,
@@ -320,6 +339,49 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
             }
             return nil
         }.value
+    }
+
+    /// Finds agy the way the user's own login shell does, before a profile's Antigravity home replaces `HOME`
+    /// and hides the shell startup files that put agy on `PATH`.
+    func discoverWSLAgyPath(distribution: String, windowsDirectory: String) async -> String? {
+        await Task.detached(priority: .utility) {
+            let discovery = WindowsCanonicalCLIInvocation(
+                executablePath: URL(fileURLWithPath: windowsDirectory)
+                    .appendingPathComponent("System32/wsl.exe").path,
+                // The script goes on standard input: wsl.exe re-quotes command-line arguments, which mangles it.
+                arguments: ["-d", distribution, "--", "/bin/sh", "-s"],
+                source: .init(distributionLabel: distribution, kind: .automatic, isResolved: false),
+                distribution: distribution,
+                standardInput: Data(Self.agyDiscoveryScript.utf8),
+                allowsRetry: false,
+                timeoutOverride: Self.agyDiscoveryTimeout)
+            return (try? self.run(invocation: discovery)).flatMap(Self.discoveredAgyPath)
+        }.value
+    }
+
+    static let agyDiscoveryTimeout: TimeInterval = 15
+
+    static let agyDiscoveryScript = #"""
+    p=$("${SHELL:-/bin/sh}" -lic 'command -v agy' </dev/null 2>/dev/null | tail -n 1)
+    case "$p" in /*) if [ -x "$p" ]; then echo "$p"; exit 0; fi ;; esac
+    for p in "$HOME/.local/bin/agy" /home/linuxbrew/.linuxbrew/bin/agy /usr/local/bin/agy /usr/bin/agy; do
+      if [ -x "$p" ]; then echo "$p"; exit 0; fi
+    done
+    exit 1
+    """#
+
+    static func discoveredAgyPath(_ data: Data) -> String? {
+        // swiftlint:disable:next optional_data_string_conversion
+        let value = String(decoding: data, as: UTF8.self)
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .last { !$0.isEmpty } ?? ""
+        guard value.hasPrefix("/"), value.count <= 4096,
+              !value.unicodeScalars.contains(where: { $0.value < 32 }),
+              WindowsProviderProfileValidation.normalizedSignInFolder(value) == value,
+              URL(fileURLWithPath: value).lastPathComponent == "agy"
+        else { return nil }
+        return value
     }
 
     static func decode(

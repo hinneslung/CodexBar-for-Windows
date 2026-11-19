@@ -99,7 +99,8 @@ enum WindowsProviderProfileValidation {
     }
 }
 
-/// The optional per-profile folder where a provider's own sign-in lives (Codex home, Claude config folder).
+/// The optional per-profile folder where a provider's own sign-in lives (Codex home, Claude config folder,
+/// Antigravity home).
 struct WindowsProviderSignInFolderField: Equatable, Sendable {
     let label: String
     let hint: String
@@ -108,7 +109,7 @@ struct WindowsProviderSignInFolderField: Equatable, Sendable {
 
     static func field(for provider: WindowsProviderID) -> Self? {
         switch provider {
-        // Provider-specific by design: Only Codex and Claude read their sign-in from a selectable folder.
+        // Provider-specific by design: Only Codex, Claude and Antigravity read their sign-in from a selectable folder.
         case .codex:
             Self(
                 label: "Codex home",
@@ -126,6 +127,14 @@ struct WindowsProviderSignInFolderField: Equatable, Sendable {
                     + "no command syntax.",
                 missingMessage: "The configured Claude config folder was not found in the selected WSL "
                     + "distribution.")
+        case .antigravity:
+            Self(
+                label: "Antigravity home",
+                hint: "Used by Automatic. Leave blank for your default agy sign-in. For another account, run "
+                    + "HOME=~/.antigravity-work agy in WSL and sign in, then enter ~/.antigravity-work here.",
+                invalidMessage: "Antigravity home must be an absolute Linux path or start with ~/ and contain no "
+                    + "command syntax.",
+                missingMessage: "The configured Antigravity home was not found in the selected WSL distribution.")
         default:
             nil
         }
@@ -172,6 +181,8 @@ struct WindowsProviderConfiguration: Codable, Equatable, Sendable, CustomStringC
     var codexHome: String?
     /// Claude Code's `CLAUDE_CONFIG_DIR` for this profile's Automatic route, so it can use another sign-in.
     var claudeConfigDirectory: String?
+    /// The home folder agy runs with for this profile's Automatic route, so it can use another sign-in.
+    var antigravityHome: String?
 
     init(
         id: WindowsProviderID,
@@ -183,7 +194,8 @@ struct WindowsProviderConfiguration: Codable, Equatable, Sendable, CustomStringC
         wslDistro: String? = nil,
         companionValues: [String: String] = [:],
         codexHome: String? = nil,
-        claudeConfigDirectory: String? = nil)
+        claudeConfigDirectory: String? = nil,
+        antigravityHome: String? = nil)
     {
         self.id = id
         self.profileID = profileID ?? .defaultID(for: id)
@@ -208,6 +220,13 @@ struct WindowsProviderConfiguration: Codable, Equatable, Sendable, CustomStringC
         } else {
             self.claudeConfigDirectory = nil
         }
+        // Provider-specific by design: An Antigravity home selects an agy sign-in, not another provider's.
+        if id == .antigravity, let antigravityHome {
+            let trimmed = antigravityHome.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.antigravityHome = trimmed.isEmpty ? nil : trimmed
+        } else {
+            self.antigravityHome = nil
+        }
     }
 
     /// The Linux folder holding this profile's own provider sign-in, for providers that support one.
@@ -216,6 +235,7 @@ struct WindowsProviderConfiguration: Codable, Equatable, Sendable, CustomStringC
             switch self.id {
             case .codex: self.codexHome
             case .claude: self.claudeConfigDirectory
+            case .antigravity: self.antigravityHome
             default: nil
             }
         }
@@ -225,6 +245,7 @@ struct WindowsProviderConfiguration: Codable, Equatable, Sendable, CustomStringC
             switch self.id {
             case .codex: self.codexHome = folder
             case .claude: self.claudeConfigDirectory = folder
+            case .antigravity: self.antigravityHome = folder
             default: break
             }
         }
@@ -241,6 +262,7 @@ struct WindowsProviderConfiguration: Codable, Equatable, Sendable, CustomStringC
         case companionValues
         case codexHome
         case claudeConfigDirectory
+        case antigravityHome
     }
 
     init(from decoder: Decoder) throws {
@@ -288,6 +310,18 @@ struct WindowsProviderConfiguration: Codable, Equatable, Sendable, CustomStringC
         }
         self.claudeConfigDirectory = self.id == .claude
             ? WindowsProviderProfileValidation.normalizedSignInFolder(decodedClaudeFolder)
+            : nil
+        let decodedAntigravityHome = try container.decodeIfPresent(String.self, forKey: .antigravityHome)
+        if let decodedAntigravityHome,
+           WindowsProviderProfileValidation.normalizedSignInFolder(decodedAntigravityHome) == nil,
+           !decodedAntigravityHome.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            throw DecodingError.dataCorruptedError(
+                forKey: .antigravityHome, in: container, debugDescription: "Invalid Antigravity home")
+        }
+        // Provider-specific by design: Restore an Antigravity home only for Antigravity profiles.
+        self.antigravityHome = self.id == .antigravity
+            ? WindowsProviderProfileValidation.normalizedSignInFolder(decodedAntigravityHome)
             : nil
     }
 

@@ -246,6 +246,120 @@ struct WindowsProviderErrorAndSignInFolderTests {
     }
 
     @Test
+    func `an Antigravity home is stored and restored only for Antigravity profiles`() throws {
+        let profile = WindowsProviderConfiguration(
+            id: .antigravity,
+            enabled: true,
+            order: 0,
+            antigravityHome: " ~/.antigravity-work ")
+        #expect(profile.antigravityHome == "~/.antigravity-work")
+        #expect(profile.signInFolder == "~/.antigravity-work")
+        #expect(
+            WindowsProviderConfiguration(id: .claude, enabled: true, order: 0, antigravityHome: "~/x")
+                .antigravityHome == nil)
+
+        let decoded = try JSONDecoder().decode(
+            WindowsProviderConfiguration.self,
+            from: JSONEncoder().encode(profile))
+        #expect(decoded.antigravityHome == "~/.antigravity-work")
+        let invalid = #"{"id":"antigravity","enabled":true,"order":0,"antigravityHome":"~/x; rm -rf /"}"#
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(WindowsProviderConfiguration.self, from: Data(invalid.utf8))
+        }
+        let foreign = #"{"id":"codex","enabled":true,"order":0,"antigravityHome":"~/.antigravity-work"}"#
+        #expect(
+            try JSONDecoder().decode(WindowsProviderConfiguration.self, from: Data(foreign.utf8))
+                .antigravityHome == nil)
+
+        let field = try #require(WindowsProviderSignInFolderField.field(for: .antigravity))
+        #expect(field.label == "Antigravity home")
+        #expect(field.hint.contains("HOME=~/.antigravity-work agy"))
+    }
+
+    @Test
+    func `an Antigravity home sets HOME and agy's path inside Linux`() async throws {
+        let profile = WindowsProviderConfiguration(
+            id: .antigravity,
+            enabled: true,
+            order: 0,
+            antigravityHome: "~/.antigravity-work")
+        let assignments = try await WindowsConfiguredProviderDataSource.automaticLinuxEnvironment(
+            for: profile,
+            distribution: "Ubuntu",
+            agyPath: { "/home/linuxbrew/.linuxbrew/bin/agy" },
+            defaultLinuxHome: { "/home/me" },
+            directoryExists: { _ in true })
+        #expect(assignments == [
+            "HOME=/home/me/.antigravity-work",
+            "ANTIGRAVITY_CLI_PATH=/home/linuxbrew/.linuxbrew/bin/agy",
+        ])
+        #expect(
+            WindowsConfiguredProviderDataSource.antigravityHomeEnvironment(home: "/srv/agy", agyPath: nil)
+                == ["HOME=/srv/agy"])
+
+        // Antigravity sets HOME inside Linux, not through WSLENV, because WSL resets HOME when it starts.
+        let overrides = try WindowsConfiguredProviderDataSource.automaticOverrides(
+            for: profile,
+            distribution: "Ubuntu",
+            defaultLinuxHome: { "/home/me" },
+            directoryExists: { _ in true })
+        #expect(overrides.isEmpty)
+
+        for other in [
+            WindowsProviderConfiguration(id: .antigravity, enabled: true, order: 0),
+            WindowsProviderConfiguration(id: .claude, enabled: true, order: 0, claudeConfigDirectory: "~/.c"),
+        ] {
+            let none = try await WindowsConfiguredProviderDataSource.automaticLinuxEnvironment(
+                for: other,
+                distribution: "Ubuntu",
+                agyPath: {
+                    Issue.record("agy discovery runs only for an Antigravity home")
+                    return nil
+                },
+                defaultLinuxHome: { "/home/me" },
+                directoryExists: { _ in true })
+            #expect(none.isEmpty)
+        }
+        await #expect(throws: WindowsStagedProviderConfigError.validationRejected(
+            "The configured Antigravity home was not found in the selected WSL distribution."))
+        {
+            try await WindowsConfiguredProviderDataSource.automaticLinuxEnvironment(
+                for: profile,
+                distribution: "Ubuntu",
+                agyPath: { nil },
+                defaultLinuxHome: { "/home/me" },
+                directoryExists: { _ in false })
+        }
+    }
+
+    @Test
+    func `Linux environment assignments run the WSL command through env`() {
+        let invocation = WindowsCanonicalCLIInvocation.wsl(
+            distribution: "Ubuntu",
+            executablePath: "/home/me/.local/bin/codexbar",
+            providerID: "antigravity",
+            windowsDirectory: #"C:\Windows"#)
+        let prefixed = invocation.prefixingLinuxEnvironment(["HOME=/home/me/.agy work"])
+        #expect(Array(prefixed.arguments.prefix(6)) == [
+            "-d", "Ubuntu", "--", "/usr/bin/env", "HOME=/home/me/.agy work", "/home/me/.local/bin/codexbar",
+        ])
+        #expect(Array(prefixed.arguments.dropFirst(5)) == Array(invocation.arguments.dropFirst(3)))
+        #expect(prefixed.allowsRetry == invocation.allowsRetry)
+        #expect(prefixed.processTimeout == invocation.processTimeout)
+        #expect(invocation.prefixingLinuxEnvironment([]) == invocation)
+    }
+
+    @Test
+    func `agy discovery accepts only an absolute agy path`() {
+        #expect(
+            WindowsCanonicalCLIProviderClient.discoveredAgyPath(Data("noise\n/home/linuxbrew/.linuxbrew/bin/agy\n".utf8))
+                == "/home/linuxbrew/.linuxbrew/bin/agy")
+        for output in ["", "agy: aliased to npx agy\n", "/usr/bin/codexbar\n", "/tmp/a;b/agy\n"] {
+            #expect(WindowsCanonicalCLIProviderClient.discoveredAgyPath(Data(output.utf8)) == nil)
+        }
+    }
+
+    @Test
     func `changing a sign-in folder counts as an unsaved change`() {
         let saved = WindowsProviderConfiguration(id: .claude, enabled: true, order: 0)
         var draft = saved
