@@ -14,18 +14,48 @@ struct WindowsLocalTimeZoneTests {
     }
 
     @Test
-    func `an unmapped key or missing ICU falls back to the current UTC offset`() throws {
+    func `an unmapped key or missing ICU falls back to a whole-hour Etc zone`() throws {
         for key: String? in ["Unknown Standard Time", nil, ""] {
             let zone = try #require(WindowsLocalTimeZone.resolve(
                 info: .init(key: key, biasMinutes: -480),
                 ianaIdentifier: { _ in nil }))
+            #expect(zone.identifier == "Etc/GMT-8")
             #expect(zone.secondsFromGMT() == 8 * 3600)
         }
         let unknownIdentifier = try #require(WindowsLocalTimeZone.resolve(
             info: .init(key: "Pacific Standard Time", biasMinutes: 420),
             ianaIdentifier: { _ in "Not/AZone" }))
-        #expect(unknownIdentifier.secondsFromGMT() == -7 * 3600)
+        #expect(unknownIdentifier.identifier == "Etc/GMT+7")
         #expect(WindowsLocalTimeZone.resolve(info: nil, ianaIdentifier: { _ in "Asia/Singapore" }) == nil)
+    }
+
+    @Test
+    func `zones that crash as Foundation's default are never returned`() throws {
+        // Etc/UTC and TimeZone(secondsFromGMT:) zones crash the process when set as NSTimeZone.default on Windows.
+        let utc = try #require(WindowsLocalTimeZone.resolve(
+            info: .init(key: "UTC", biasMinutes: 0),
+            ianaIdentifier: { _ in "Etc/UTC" }))
+        #expect(utc.identifier == "GMT")
+        #expect(WindowsLocalTimeZone.etcZone(biasMinutes: 0)?.identifier == "Etc/GMT")
+        #expect(WindowsLocalTimeZone.etcZone(biasMinutes: 720)?.identifier == "Etc/GMT+12")
+        #expect(WindowsLocalTimeZone.etcZone(biasMinutes: -840)?.identifier == "Etc/GMT-14")
+        // India (UTC+5:30) and other non-whole-hour offsets have no Etc zone; Foundation's zone is kept.
+        #expect(WindowsLocalTimeZone.etcZone(biasMinutes: -330) == nil)
+        #expect(WindowsLocalTimeZone.resolve(info: .init(key: nil, biasMinutes: -330), ianaIdentifier: { _ in nil })
+            == nil)
+    }
+
+    @Test
+    func `Foundation's zone is replaced only when its offset is wrong`() throws {
+        let now = try #require(ISO8601DateFormatter().date(from: "2026-11-19T08:30:00Z"))
+        let singapore = try #require(TimeZone(identifier: "Asia/Singapore"))
+        let gmt = try #require(TimeZone(identifier: "GMT"))
+        #expect(WindowsLocalTimeZone.needsOverride(resolved: singapore, foundation: gmt, now: now))
+        #expect(!WindowsLocalTimeZone.needsOverride(resolved: gmt, foundation: gmt, now: now))
+        #expect(!WindowsLocalTimeZone.needsOverride(
+            resolved: singapore,
+            foundation: try #require(TimeZone(identifier: "Asia/Hong_Kong")),
+            now: now))
     }
 
     #if os(Windows)

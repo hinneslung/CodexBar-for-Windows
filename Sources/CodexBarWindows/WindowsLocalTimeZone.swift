@@ -16,23 +16,43 @@ enum WindowsLocalTimeZone {
         let biasMinutes: Int
     }
 
-    /// The zone for a Windows key, or a fixed offset from UTC when the key cannot be mapped to an IANA zone.
+    /// The zone for a Windows key, or a whole-hour `Etc/GMT±N` zone when the key cannot be mapped to an IANA zone.
+    ///
+    /// Setting Foundation's default on Windows crashes the process for `Etc/UTC` and for fixed-offset zones made with
+    /// `TimeZone(secondsFromGMT:)`, so neither is ever returned: `Etc/UTC` becomes `GMT`, and offsets that are not
+    /// whole hours have no fallback.
     static func resolve(info: Info?, ianaIdentifier: (String) -> String?) -> TimeZone? {
         guard let info else { return nil }
-        if let key = info.key, !key.isEmpty,
-           let identifier = ianaIdentifier(key),
-           let zone = TimeZone(identifier: identifier)
-        {
-            return zone
+        if let key = info.key, !key.isEmpty, let identifier = ianaIdentifier(key) {
+            let safeIdentifier = self.crashingDefaultIdentifiers.contains(identifier) ? "GMT" : identifier
+            if let zone = TimeZone(identifier: safeIdentifier) { return zone }
         }
-        return TimeZone(secondsFromGMT: -info.biasMinutes * 60)
+        return self.etcZone(biasMinutes: info.biasMinutes)
     }
 
-    /// Resolves the Windows time zone and makes it Foundation's default. Called at startup and when Windows reports a
-    /// time change.
+    private static let crashingDefaultIdentifiers: Set<String> = ["Etc/UTC", "Etc/UCT", "Etc/Universal", "Etc/Zulu"]
+
+    /// `Etc/GMT` zones invert the usual sign: UTC+8 is `Etc/GMT-8`. The database covers UTC-12 through UTC+14.
+    static func etcZone(biasMinutes: Int) -> TimeZone? {
+        guard biasMinutes.isMultiple(of: 60) else { return nil }
+        let hours = biasMinutes / 60
+        guard (-14...12).contains(hours) else { return nil }
+        let identifier = hours == 0 ? "Etc/GMT" : "Etc/GMT\(hours > 0 ? "+" : "-")\(abs(hours))"
+        return TimeZone(identifier: identifier)
+    }
+
+    /// Whether Foundation's own zone is wrong now. Foundation is right for most zones, and the default is only
+    /// replaced when it is not, so a machine whose zone Foundation already handles keeps Foundation's behavior.
+    static func needsOverride(resolved: TimeZone, foundation: TimeZone, now: Date = Date()) -> Bool {
+        resolved.secondsFromGMT(for: now) != foundation.secondsFromGMT(for: now)
+    }
+
+    /// Resolves the Windows time zone and makes it Foundation's default when Foundation's own zone is wrong. Called at
+    /// startup and when Windows reports a time change.
     @discardableResult
     static func apply() -> TimeZone? {
-        guard let zone = self.resolve(info: self.currentInfo(), ianaIdentifier: self.ianaIdentifier(forWindowsKey:))
+        guard let zone = self.resolve(info: self.currentInfo(), ianaIdentifier: self.ianaIdentifier(forWindowsKey:)),
+              self.needsOverride(resolved: zone, foundation: NSTimeZone.default)
         else { return nil }
         NSTimeZone.default = zone
         return zone
