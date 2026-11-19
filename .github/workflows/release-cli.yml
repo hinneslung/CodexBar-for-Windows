@@ -411,6 +411,8 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: codexbar-cli-${{ matrix.name }}
+          # Releases only hand the musl package to this run's Windows jobs; manual runs keep it for testing.
+          retention-days: ${{ github.event_name == 'workflow_dispatch' && 3 || 1 }}
           path: |
             ${{ steps.pkg.outputs.out_dir }}/${{ steps.pkg.outputs.asset }}
             ${{ steps.pkg.outputs.out_dir }}/${{ steps.pkg.outputs.asset }}.sha256
@@ -612,6 +614,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: codexbar-windows-${{ matrix.asset-arch }}-portable
+          retention-days: 3
           path: |
             ${{ steps.package.outputs.asset }}
             ${{ steps.package.outputs.checksum }}
@@ -621,6 +624,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: codexbar-windows-${{ matrix.asset-arch }}-installer
+          retention-days: 3
           path: |
             ${{ steps.installer.outputs.asset }}
             ${{ steps.installer.outputs.checksum }}
