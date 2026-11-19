@@ -298,6 +298,10 @@ final class WindowsTrayApplication {
         case Self.updateCheckCompletedMessage:
             self.consumeUpdateCheckResult(generation: UInt64(wParam))
             return 0
+        case UINT(WM_TIMECHANGE):
+            // Picks up a time zone change; reset times use it from the next refresh.
+            WindowsLocalTimeZone.apply()
+            return 0
         case UINT(WM_DESTROY):
             self.removeTrayIcon()
             PostQuitMessage(0)

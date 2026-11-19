@@ -10,6 +10,7 @@ enum CodexBarWindowsMain {
         #if os(Windows)
         _ = SetProcessDPIAware()
         #endif
+        WindowsLocalTimeZone.apply()
         let environment = ProcessInfo.processInfo.environment
         let configurationStore = try? WindowsConfigurationStore(environment: environment)
         let credentialVault = try? WindowsProviderCredentialVault(environment: environment)
