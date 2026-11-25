@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.78.0-windows.11 — 2026-11-25
+
+- Add a Detailed overview (the new default) that lists every selected usage number per profile, and keep the previous view as Compact, switched by a button next to the pin. Profiles choose their overview numbers in settings; Compact and the tray tooltip pick the lowest of them. The overview grows to the screen height, and reset times are brighter.
+
 ## 0.78.0-windows.10 — 2026-11-19
 
 - Show reset times in the Windows time zone. Zones such as Singapore Standard Time were shown in UTC.
