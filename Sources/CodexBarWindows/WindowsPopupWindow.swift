@@ -3256,8 +3256,27 @@ final class WindowsPopupWindow {
         let fullHeight = contentHeight + self.currentHeaderHeight + self.scaled(Metrics.footerHeight)
         return SIZE(
             cx: self.scaled(Metrics.width),
-            cy: min(
-                self.scaled(Metrics.maximumHeight), max(self.scaled(Metrics.minimumHeight), fullHeight)))
+            cy: min(self.maximumWindowHeight(), max(self.scaled(Metrics.minimumHeight), fullHeight)))
+    }
+
+    /// The overview grows to the work area of its monitor so every row fits without scrolling; the other pages
+    /// keep the fixed limit.
+    private func maximumWindowHeight() -> Int32 {
+        let fixed = self.scaled(Metrics.maximumHeight)
+        guard self.page == .overview else { return fixed }
+        let monitor: HMONITOR?
+        if self.isVisible, let window = self.window {
+            monitor = MonitorFromWindow(window, DWORD(MONITOR_DEFAULTTONEAREST))
+        } else {
+            var cursor = POINT()
+            _ = GetCursorPos(&cursor)
+            monitor = MonitorFromPoint(cursor, DWORD(MONITOR_DEFAULTTONEAREST))
+        }
+        var info = MONITORINFO()
+        info.cbSize = DWORD(MemoryLayout<MONITORINFO>.size)
+        guard GetMonitorInfoW(monitor, &info) else { return fixed }
+        let available = info.rcWork.bottom - info.rcWork.top - 2 * self.scaled(8)
+        return max(self.scaled(Metrics.minimumHeight), available)
     }
 
     private func providerContentHeight(index: Int) -> Int32 {
