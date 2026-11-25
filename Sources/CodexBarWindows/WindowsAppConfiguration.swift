@@ -257,6 +257,7 @@ struct WindowsProviderConfiguration: Codable, Equatable, Sendable, CustomStringC
     /// The Linux folder holding this profile's own provider sign-in, for providers that support one.
     var signInFolder: String? {
         get {
+            // Provider-specific by design: each provider stores its sign-in folder in its own setting.
             switch self.id {
             case .codex: self.codexHome
             case .claude: self.claudeConfigDirectory
