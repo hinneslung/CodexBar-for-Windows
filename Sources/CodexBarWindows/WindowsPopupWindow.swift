@@ -30,6 +30,12 @@ final class WindowsPopupWindow {
         static let headerHeight: Int32 = 42
         static let footerHeight: Int32 = 38
         static let overviewRowHeight: Int32 = 60
+        /// Detailed overview: name line, optional context line, then one line per selected number.
+        static let detailedOverviewHeaderHeight: Int32 = 30
+        static let detailedOverviewContextHeight: Int32 = 18
+        static let detailedOverviewNumberHeight: Int32 = 30
+        static let detailedOverviewBottomPadding: Int32 = 4
+        static let overviewNumberChecklistRowHeight: Int32 = 28
         static let switcherRowHeight: Int32 = 36
         static let settingsGlobalHeight: Int32 = 50
         /// Percentage used, Run at startup, Refresh interval, and Check for updates.
@@ -63,6 +69,8 @@ final class WindowsPopupWindow {
 
     private enum Action {
         case togglePin
+        case toggleOverviewStyle
+        case toggleOverviewNumber(String)
         case refresh
         case settings
         case switcher
@@ -128,6 +136,9 @@ final class WindowsPopupWindow {
     private var configurationCredentialSelectionTouched = false
     private var configurationCredentialHelpExpanded = false
     private var configurationLastAppliedProfile: WindowsProviderProfileID?
+    private var overviewNumberCatalog = WindowsOverviewNumberCatalog()
+    /// The profile page's unsaved overview selection; nil until the user changes a tick.
+    private var configurationOverviewHiddenDraft: [String]?
     private var configurationReturnPage: Page = .settings
     private let availableWSLDistributions = WindowsWSLDistributionRegistry.names()
     private let providerLogoAtlas = WindowsProviderLogoAtlas.load()
@@ -348,6 +359,14 @@ final class WindowsPopupWindow {
         guard update != self.availableUpdate else { return }
         self.availableUpdate = update
         _ = InvalidateRect(self.window, nil, false)
+    }
+
+    func updateOverviewNumberCatalog(_ catalog: WindowsOverviewNumberCatalog) {
+        guard catalog != self.overviewNumberCatalog else { return }
+        self.overviewNumberCatalog = catalog
+        if case .configure = self.page {
+            self.resizeForCurrentPage()
+        }
     }
 
     func updateConfiguration(_ configuration: WindowsAppConfiguration) {
@@ -695,11 +714,15 @@ final class WindowsPopupWindow {
                 left: 0,
                 top: y,
                 right: client.right,
-                bottom: y + self.scaled(Metrics.overviewRowHeight))
+                bottom: y + self.overviewRowHeight(row))
             if rect.bottom > 0,
                rect.top < client.bottom - self.scaled(Metrics.footerHeight)
             {
-                self.drawOverviewRow(dc: dc, rect: rect, row: row, index: index)
+                if self.showsDetailedOverviewRow(row) {
+                    self.drawDetailedOverviewRow(dc: dc, rect: rect, row: row, index: index)
+                } else {
+                    self.drawOverviewRow(dc: dc, rect: rect, row: row, index: index)
+                }
                 if let hitRect = self.contentHitRect(rect, client: client) {
                     self.hitTargets.append(HitTarget(rect: hitRect, action: .provider(index)))
                 }
@@ -708,6 +731,131 @@ final class WindowsPopupWindow {
         }
         self.endContentClip(dc: dc, state: contentState)
         self.drawFooter(dc: dc, client: client)
+    }
+
+    /// Detailed rows list every selected number; rows without numbers (balances, loading) keep the compact layout.
+    private func showsDetailedOverviewRow(_ row: WindowsProviderRowPresentation) -> Bool {
+        self.configuration.overviewStyle == .detailed && !row.overviewWindows.isEmpty
+    }
+
+    private func overviewRowHeight(_ row: WindowsProviderRowPresentation) -> Int32 {
+        guard self.showsDetailedOverviewRow(row) else { return self.scaled(Metrics.overviewRowHeight) }
+        let context = row.overviewStatusText.isEmpty ? 0 : Metrics.detailedOverviewContextHeight
+        return self.scaled(
+            Metrics.detailedOverviewHeaderHeight + context
+                + Metrics.detailedOverviewNumberHeight * Int32(row.overviewWindows.count)
+                + Metrics.detailedOverviewBottomPadding)
+    }
+
+    private var overviewContentHeight: Int32 {
+        self.presentation.rows.reduce(Int32(0)) { $0 + self.overviewRowHeight($1) }
+    }
+
+    private func textWidth(_ text: String, dc: HDC?, font: HFONT?) -> Int32 {
+        guard !text.isEmpty, let dc, let font, let previous = SelectObject(dc, font) else { return 0 }
+        defer { _ = SelectObject(dc, previous) }
+        var measured = RECT()
+        let result = WindowsWideString.withPointer(text) { pointer in
+            DrawTextW(dc, pointer, -1, &measured, UINT(DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX))
+        }
+        return result > 0 ? max(0, measured.right - measured.left) : 0
+    }
+
+    private func drawDetailedOverviewRow(
+        dc: HDC?,
+        rect: RECT,
+        row: WindowsProviderRowPresentation,
+        index: Int)
+    {
+        let inset = self.scaled(Metrics.horizontalInset)
+        let badge = RECT(
+            left: inset,
+            top: rect.top + self.scaled(8),
+            right: inset + self.scaled(16),
+            bottom: rect.top + self.scaled(24))
+        self.drawProviderLogo(dc: dc, provider: row.provider, rect: badge)
+        WindowsDashboardDrawing.text(
+            row.displayName,
+            dc: dc,
+            rect: RECT(
+                left: badge.right + self.scaled(8),
+                top: rect.top + self.scaled(5),
+                right: rect.right - inset,
+                bottom: rect.top + self.scaled(27)),
+            color: WindowsDashboardPalette.primaryText,
+            font: self.bodySemiboldFont,
+            format: UINT(DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS))
+        var y = rect.top + self.scaled(Metrics.detailedOverviewHeaderHeight)
+        let context = row.overviewStatusText
+        if !context.isEmpty {
+            WindowsDashboardDrawing.text(
+                context,
+                dc: dc,
+                rect: RECT(
+                    left: inset,
+                    top: y - self.scaled(4),
+                    right: rect.right - inset,
+                    bottom: y + self.scaled(Metrics.detailedOverviewContextHeight - 4)),
+                color: row.errorText.isEmpty
+                    ? WindowsDashboardPalette.secondaryText : WindowsDashboardPalette.clayText,
+                font: self.secondaryFont,
+                format: UINT(DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS))
+            y += self.scaled(Metrics.detailedOverviewContextHeight)
+        }
+        let percentWidth = self.scaled(76)
+        for usage in row.overviewWindows {
+            let textBottom = y + self.scaled(19)
+            let percentLeft = rect.right - inset - percentWidth
+            WindowsDashboardDrawing.text(
+                usage.displayedPercentText(showUsed: self.configuration.usageBarsShowUsed),
+                dc: dc,
+                rect: RECT(left: percentLeft, top: y, right: rect.right - inset, bottom: textBottom),
+                color: WindowsDashboardPalette.primaryText,
+                font: self.bodySemiboldFont,
+                format: UINT(DT_RIGHT | DT_VCENTER | DT_SINGLELINE))
+            let reset = usage.overviewResetText
+            let resetWidth = min(
+                self.textWidth(reset, dc: dc, font: self.secondaryFont),
+                (percentLeft - inset) / 2)
+            let resetRight = percentLeft - self.scaled(8)
+            if resetWidth > 0 {
+                WindowsDashboardDrawing.text(
+                    reset,
+                    dc: dc,
+                    rect: RECT(left: resetRight - resetWidth, top: y, right: resetRight, bottom: textBottom),
+                    color: WindowsDashboardPalette.resetText,
+                    font: self.secondaryFont,
+                    format: UINT(DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS))
+            }
+            WindowsDashboardDrawing.text(
+                usage.label,
+                dc: dc,
+                rect: RECT(
+                    left: inset,
+                    top: y,
+                    right: resetWidth > 0 ? resetRight - resetWidth - self.scaled(8) : resetRight,
+                    bottom: textBottom),
+                color: WindowsDashboardPalette.primaryText,
+                font: self.bodyFont,
+                format: UINT(DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS))
+            self.drawMeter(
+                dc: dc,
+                rect: RECT(
+                    left: inset,
+                    top: y + self.scaled(22),
+                    right: rect.right - inset,
+                    bottom: y + self.scaled(25)),
+                usedPercent: usage.usedPercent)
+            y += self.scaled(Metrics.detailedOverviewNumberHeight)
+        }
+        if index + 1 < self.presentation.rows.count {
+            WindowsDashboardDrawing.line(
+                dc: dc,
+                fromX: inset,
+                y: rect.bottom - 1,
+                toX: rect.right - inset,
+                color: WindowsDashboardPalette.border)
+        }
     }
 
     private func drawOverviewRow(
@@ -807,7 +955,7 @@ final class WindowsPopupWindow {
                     top: detailTop,
                     right: rect.right - inset,
                     bottom: detailBottom),
-                color: WindowsDashboardPalette.captionText,
+                color: WindowsDashboardPalette.resetText,
                 font: self.secondaryFont,
                 format: UINT(DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS))
         }
@@ -944,7 +1092,7 @@ final class WindowsPopupWindow {
                 top: y + self.scaled(29),
                 right: client.right - inset,
                 bottom: y + self.scaled(47)),
-            color: WindowsDashboardPalette.captionText,
+            color: WindowsDashboardPalette.resetText,
             font: self.secondaryFont,
             format: UINT(DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS))
     }
@@ -1568,7 +1716,14 @@ final class WindowsPopupWindow {
                 color: WindowsDashboardPalette.clayText,
                 font: self.secondaryFont,
                 format: UINT(DT_LEFT | DT_TOP | DT_WORDBREAK))
+            y += self.scaled(46)
         }
+        self.drawOverviewNumberChecklist(
+            dc: dc,
+            client: client,
+            top: y + self.scaled(8),
+            profileID: profileID,
+            draft: draft)
         self.endContentClip(dc: dc, state: contentState)
         let profileCount = self.configuration.profileCount(for: provider)
         let title = WindowsProviderProfilePresentation.displayName(
@@ -1974,6 +2129,7 @@ final class WindowsPopupWindow {
             _ = DestroyWindow(credentialControl)
         }
         self.resetProviderFieldControls()
+        self.configurationOverviewHiddenDraft = nil
         self.configurationSourceControl = nil
         self.configurationCredentialControl = nil
         self.configurationProfileNameControl = nil
@@ -2397,6 +2553,9 @@ final class WindowsPopupWindow {
         {
             configuration.signInFolder = Self.windowText(control)
         }
+        if let hidden = self.configurationOverviewHiddenDraft {
+            configuration.hiddenOverviewWindowKeys = WindowsProviderConfiguration.normalizedOverviewWindowKeys(hidden)
+        }
         return configuration
     }
 
@@ -2657,8 +2816,13 @@ final class WindowsPopupWindow {
                 font: self.systemIconFont,
                 format: UINT(DT_CENTER | DT_VCENTER | DT_SINGLELINE))
             self.hitTargets.append(HitTarget(rect: pinRect, action: .togglePin))
+            let styleRect = self.drawOverviewStyleButton(
+                dc: dc,
+                top: top,
+                bottom: client.bottom,
+                left: pinRect.right + self.scaled(2))
             if self.availableUpdate != nil {
-                self.drawUpdateButton(dc: dc, top: top, bottom: client.bottom, left: pinRect.right + self.scaled(4))
+                self.drawUpdateButton(dc: dc, top: top, bottom: client.bottom, left: styleRect.right + self.scaled(4))
             }
         }
         if let saveAction {
@@ -2721,7 +2885,7 @@ final class WindowsPopupWindow {
             dc: dc,
             rect: RECT(
                 left: backAction == nil
-                    ? self.scaled(48)
+                    ? self.scaled(self.availableUpdate == nil ? 82 : 120)
                     : (saveAction == nil ? inset + self.scaled(98) : inset + self.scaled(166)),
                 top: top,
                 right: refreshRect.left - self.scaled(4),
@@ -2862,6 +3026,10 @@ final class WindowsPopupWindow {
         switch target.action {
         case .togglePin:
             self.togglePin()
+        case .toggleOverviewStyle:
+            WindowsTrayApplication.current?.toggleOverviewStyle()
+        case let .toggleOverviewNumber(key):
+            self.toggleOverviewNumber(key)
         case .openUpdate:
             self.openAvailableUpdate()
         case .toggleCheckForUpdates:
@@ -3024,7 +3192,7 @@ final class WindowsPopupWindow {
         let content: Int32 =
             switch self.page {
             case .overview:
-                Int32(self.presentation.rows.count) * self.scaled(Metrics.overviewRowHeight)
+                self.overviewContentHeight
             case .switcher:
                 Int32(self.presentation.rows.count) * self.scaled(Metrics.switcherRowHeight)
             case let .provider(index):
@@ -3075,7 +3243,7 @@ final class WindowsPopupWindow {
         let contentHeight: Int32 =
             switch self.page {
             case .overview:
-                Int32(self.presentation.rows.count) * self.scaled(Metrics.overviewRowHeight)
+                self.overviewContentHeight
             case .switcher:
                 Int32(self.presentation.rows.count) * self.scaled(Metrics.switcherRowHeight)
             case let .provider(index):
@@ -3144,11 +3312,143 @@ final class WindowsPopupWindow {
             self.configurationCredentialSetDraftID == nil
                 ? self.configurationAutomaticHintHeight(provider: provider)
                 : 0
-        return self.scaled(180 + loadingHeight + errorHeight)
+        return self.scaled(180 + loadingHeight + errorHeight + 8)
             + self.configurationSignInFolderBlockHeight(provider)
             + self.configurationCredentialHelpHeight
             + fieldsHeight
             + automaticHintHeight
+            + self.overviewNumberChecklistHeight(profileID: profileID)
+    }
+
+    // MARK: - Overview numbers
+
+    private static let overviewNumberChecklistNote =
+        "Ticked numbers appear in the overview. Compact shows the lowest of them. The detail view always shows "
+            + "every number."
+    private static let overviewNumberChecklistPending =
+        "Numbers appear here after this profile's first successful refresh, and are remembered after that."
+    private static let overviewNumberChecklistNone = "This profile has no numbers to choose."
+
+    private func overviewHiddenKeys(profileID: WindowsProviderProfileID) -> Set<String> {
+        if let draft = self.configurationOverviewHiddenDraft { return Set(draft) }
+        let saved = self.configuration.providers.first(where: { $0.profileID == profileID })
+        return Set(saved?.hiddenOverviewWindowKeys ?? [])
+    }
+
+    private func overviewNumberChecklistHeight(profileID: WindowsProviderProfileID) -> Int32 {
+        let noteHeight = self.configurationWrappedTextHeight(Self.overviewNumberChecklistNote) ?? self.scaled(32)
+        let body: Int32 =
+            if let options = self.overviewNumberCatalog.options(for: profileID), !options.isEmpty {
+                self.scaled(Metrics.overviewNumberChecklistRowHeight) * Int32(options.count)
+            } else {
+                (self.configurationWrappedTextHeight(
+                    self.overviewNumberCatalog.options(for: profileID) == nil
+                        ? Self.overviewNumberChecklistPending : Self.overviewNumberChecklistNone)
+                    ?? self.scaled(32)) + self.scaled(8)
+            }
+        return self.scaled(26 + 6 + 8) + noteHeight + body
+    }
+
+    private func drawOverviewNumberChecklist(
+        dc: HDC?,
+        client: RECT,
+        top: Int32,
+        profileID: WindowsProviderProfileID,
+        draft: WindowsProviderConfiguration?)
+    {
+        let inset = self.scaled(Metrics.horizontalInset)
+        var y = top
+        WindowsDashboardDrawing.text(
+            "Overview numbers",
+            dc: dc,
+            rect: RECT(left: inset, top: y, right: client.right - inset, bottom: y + self.scaled(22)),
+            color: WindowsDashboardPalette.primaryText,
+            font: self.bodySemiboldFont,
+            format: UINT(DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS))
+        y += self.scaled(26)
+        let noteHeight = self.configurationWrappedTextHeight(Self.overviewNumberChecklistNote) ?? self.scaled(32)
+        WindowsDashboardDrawing.text(
+            Self.overviewNumberChecklistNote,
+            dc: dc,
+            rect: RECT(left: inset, top: y, right: client.right - inset, bottom: y + noteHeight),
+            color: WindowsDashboardPalette.captionText,
+            font: self.secondaryFont,
+            format: UINT(DT_LEFT | DT_TOP | DT_WORDBREAK))
+        y += noteHeight + self.scaled(6)
+        guard let options = self.overviewNumberCatalog.options(for: profileID), !options.isEmpty else {
+            let message =
+                self.overviewNumberCatalog.options(for: profileID) == nil
+                    ? Self.overviewNumberChecklistPending : Self.overviewNumberChecklistNone
+            let messageHeight = self.configurationWrappedTextHeight(message) ?? self.scaled(32)
+            WindowsDashboardDrawing.text(
+                message,
+                dc: dc,
+                rect: RECT(left: inset, top: y, right: client.right - inset, bottom: y + messageHeight),
+                color: WindowsDashboardPalette.secondaryText,
+                font: self.secondaryFont,
+                format: UINT(DT_LEFT | DT_TOP | DT_WORDBREAK))
+            return
+        }
+        let hidden = Set(draft?.hiddenOverviewWindowKeys ?? Array(self.overviewHiddenKeys(profileID: profileID)))
+        let shownCount = options.lazy.filter { !hidden.contains($0.key) }.count
+        let rowHeight = self.scaled(Metrics.overviewNumberChecklistRowHeight)
+        let boxSize = self.scaled(14)
+        for option in options {
+            let isShown = !hidden.contains(option.key)
+            let isLocked = isShown && shownCount == 1
+            let rowRect = RECT(left: inset - self.scaled(6), top: y, right: client.right - inset, bottom: y + rowHeight)
+            let boxTop = y + (rowHeight - boxSize) / 2
+            let box = RECT(left: inset, top: boxTop, right: inset + boxSize, bottom: boxTop + boxSize)
+            WindowsDashboardDrawing.roundedRect(
+                dc: dc,
+                rect: box,
+                radius: self.scaled(3),
+                fill: isShown ? WindowsDashboardPalette.sage : WindowsDashboardPalette.background,
+                border: isLocked ? WindowsDashboardPalette.disabledText : WindowsDashboardPalette.sage)
+            if isShown {
+                WindowsDashboardDrawing.text(
+                    "\u{2713}",
+                    dc: dc,
+                    rect: box,
+                    color: WindowsDashboardPalette.background,
+                    font: self.secondaryFont,
+                    format: UINT(DT_CENTER | DT_VCENTER | DT_SINGLELINE))
+            }
+            WindowsDashboardDrawing.text(
+                option.label,
+                dc: dc,
+                rect: RECT(
+                    left: box.right + self.scaled(9),
+                    top: y,
+                    right: client.right - inset,
+                    bottom: y + rowHeight),
+                color: isLocked ? WindowsDashboardPalette.secondaryText : WindowsDashboardPalette.primaryText,
+                font: self.bodyFont,
+                format: UINT(DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS))
+            if !isLocked, let hitRect = self.contentHitRect(rowRect, client: client) {
+                self.hitTargets.append(HitTarget(rect: hitRect, action: .toggleOverviewNumber(option.key)))
+            }
+            y += rowHeight
+        }
+    }
+
+    /// Ticks or unticks a number in the profile draft. The last ticked number cannot be unticked.
+    private func toggleOverviewNumber(_ key: String) {
+        guard case let .configure(profileID) = self.page,
+              let options = self.overviewNumberCatalog.options(for: profileID),
+              options.contains(where: { $0.key == key })
+        else { return }
+        var hidden = self.overviewHiddenKeys(profileID: profileID)
+        if hidden.contains(key) {
+            hidden.remove(key)
+        } else {
+            let shownCount = options.lazy.filter { !hidden.contains($0.key) }.count
+            guard shownCount > 1 else { return }
+            hidden.insert(key)
+        }
+        self.configurationOverviewHiddenDraft = hidden.sorted()
+        self.configurationDraftValidationError = nil
+        _ = InvalidateRect(self.window, nil, false)
     }
 
     private func anchoredOrigin(size: SIZE) -> POINT {
@@ -3293,6 +3593,41 @@ final class WindowsPopupWindow {
         guard count > 0 else { return nil }
         let end = buffer.firstIndex(of: 0) ?? min(Int(count), buffer.count)
         return String(decoding: buffer[..<end], as: UTF16.self)
+    }
+
+    /// Switches the overview between Detailed (every selected number) and Compact (the lowest one). The icon shows
+    /// the current style: three lines for Detailed, one highlighted line for Compact.
+    private func drawOverviewStyleButton(dc: HDC?, top: Int32, bottom: Int32, left: Int32) -> RECT {
+        let rect = RECT(left: left, top: top, right: left + self.scaled(34), bottom: bottom)
+        let isCompact = self.configuration.overviewStyle == .compact
+        if isCompact {
+            WindowsDashboardDrawing.roundedRect(
+                dc: dc,
+                rect: RECT(
+                    left: rect.left,
+                    top: top + self.scaled(5),
+                    right: rect.right,
+                    bottom: bottom - self.scaled(5)),
+                radius: self.scaled(6),
+                fill: WindowsDashboardPalette.sageSurface,
+                border: WindowsDashboardPalette.sage)
+        }
+        let color = isCompact ? WindowsDashboardPalette.sageText : WindowsDashboardPalette.secondaryText
+        let centerY = (top + bottom) / 2
+        let lineLeft = rect.left + self.scaled(10)
+        let lineRight = rect.right - self.scaled(10)
+        let thickness = max(1, self.scaled(2))
+        let offsets: [Int32] = isCompact ? [0] : [-5, 0, 5]
+        for offset in offsets {
+            let lineTop = centerY + self.scaled(offset) - thickness / 2
+            WindowsDashboardDrawing.roundedRect(
+                dc: dc,
+                rect: RECT(left: lineLeft, top: lineTop, right: lineRight, bottom: lineTop + thickness),
+                radius: 0,
+                fill: color)
+        }
+        self.hitTargets.append(HitTarget(rect: rect, action: .toggleOverviewStyle))
+        return rect
     }
 
     /// The download icon beside the pin, shown while a newer release is published.

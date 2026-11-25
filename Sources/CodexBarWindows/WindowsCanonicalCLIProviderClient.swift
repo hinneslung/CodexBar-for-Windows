@@ -427,20 +427,24 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
             Self.append(
                 payload.usage?.primary,
                 defaultLabel: Self.normalized(labels?.primary) ?? "Session",
+                key: "primary",
                 to: &windows)
             Self.append(
                 payload.usage?.secondary,
                 defaultLabel: Self.normalized(labels?.secondary) ?? "Weekly",
+                key: "secondary",
                 to: &windows)
             Self.append(
                 payload.usage?.tertiary,
                 defaultLabel: Self.normalized(labels?.tertiary) ?? "Monthly",
+                key: "tertiary",
                 to: &windows)
         }
         for extra in extras {
             // Provider-specific by design: only Antigravity folds a separate allowance into another bucket's title.
             let title = requestedProvider == .antigravity ? Self.antigravityBucketTitle(extra) : extra.title
-            Self.append(extra.window, defaultLabel: title, to: &windows)
+            // Keyed by the CLI's id, not the title, which the app may relabel (for example Gemini Argon).
+            Self.append(extra.window, defaultLabel: title, key: Self.overviewKey(forExtraID: extra.id), to: &windows)
         }
         var balanceText = payload.credits.flatMap { credits -> String? in
             guard credits.balanceReadSucceeded != false else { return nil }
@@ -756,9 +760,16 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
         return "Gemini Argon \(extra.title.dropFirst(geminiPrefix.count))"
     }
 
+    /// Extra windows without an id have no stable identity, so they cannot be hidden from the overview.
+    static func overviewKey(forExtraID id: String?) -> String? {
+        guard let id = self.normalized(id), id.count <= 200 else { return nil }
+        return "extra:\(id)"
+    }
+
     private static func append(
         _ window: RateWindow?,
         defaultLabel: String,
+        key: String?,
         to windows: inout [WindowsProviderWindowSnapshot])
     {
         guard let window, window.isSyntheticPlaceholder != true else { return }
@@ -770,7 +781,8 @@ struct WindowsCanonicalCLIProviderClient: Sendable {
                 resetText: WindowsResetLabelFormatter.label(
                     resetsAt: window.resetsAt,
                     description: window.resetDescription),
-                resetsAt: window.resetsAt))
+                resetsAt: window.resetsAt,
+                key: key))
     }
 
     private static func decodeDate(_ decoder: Decoder) throws -> Date {

@@ -12,12 +12,22 @@ struct WindowsProviderWindowSnapshot: Equatable, Sendable {
     let usedPercent: Double
     let resetText: String?
     let resetsAt: Date?
+    /// Stable identity for the overview selection: `primary`, `secondary`, `tertiary`, or `extra:<CLI id>`.
+    /// Nil for numbers without a stable identity; those are always shown and cannot be hidden.
+    let key: String?
 
-    init(label: String, usedPercent: Double, resetText: String? = nil, resetsAt: Date? = nil) {
+    init(
+        label: String,
+        usedPercent: Double,
+        resetText: String? = nil,
+        resetsAt: Date? = nil,
+        key: String? = nil)
+    {
         self.label = label
         self.usedPercent = usedPercent
         self.resetText = resetText
         self.resetsAt = resetsAt
+        self.key = key
     }
 }
 
@@ -310,19 +320,22 @@ struct WindowsUsageWindowPresentation: Equatable, Sendable {
     let percentText: String
     let resetText: String
     let resetsAt: Date?
+    let key: String?
 
     init(
         label: String,
         usedPercent: Double,
         percentText: String,
         resetText: String,
-        resetsAt: Date? = nil)
+        resetsAt: Date? = nil,
+        key: String? = nil)
     {
         self.label = label
         self.usedPercent = usedPercent
         self.percentText = percentText
         self.resetText = resetText
         self.resetsAt = resetsAt
+        self.key = key
     }
 
     func displayedPercent(showUsed: Bool) -> Double {
@@ -355,7 +368,11 @@ struct WindowsProviderRowPresentation: Equatable, Sendable {
     let resetText: String
     let sourceText: String
     let errorText: String
+    /// Every number, for the detail view.
     let windows: [WindowsUsageWindowPresentation]
+    /// The numbers the overview, the Compact style, and the tray tooltip use: the profile's selected numbers, or
+    /// every number when none of the selected ones is reported.
+    let overviewWindows: [WindowsUsageWindowPresentation]
     let planText: String
     let balanceText: String
     let accountText: String
@@ -383,7 +400,8 @@ struct WindowsProviderRowPresentation: Equatable, Sendable {
         codexResetCredits: WindowsCodexResetCredits? = nil,
         codexResetCreditsText: String = "",
         codexResetCreditsAccessibilityText: String = "",
-        detailSections: [WindowsProviderDetailSection] = [])
+        detailSections: [WindowsProviderDetailSection] = [],
+        hiddenOverviewWindowKeys: Set<String> = [])
     {
         self.provider = provider
         self.profileID = profileID ?? .defaultID(for: provider)
@@ -395,6 +413,7 @@ struct WindowsProviderRowPresentation: Equatable, Sendable {
         self.sourceText = sourceText
         self.errorText = errorText
         self.windows = windows
+        self.overviewWindows = Self.overviewWindows(windows, hidden: hiddenOverviewWindowKeys)
         self.planText = planText
         self.balanceText = balanceText
         self.accountText = accountText
@@ -412,8 +431,18 @@ struct WindowsProviderRowPresentation: Equatable, Sendable {
             distinguishesProfile: self.distinguishesProfile)
     }
 
+    /// The most-used selected number: the Compact overview's number and the tray tooltip's.
     var governingWindow: WindowsUsageWindowPresentation? {
-        self.windows.max(by: { $0.usedPercent < $1.usedPercent })
+        self.overviewWindows.max(by: { $0.usedPercent < $1.usedPercent })
+    }
+
+    static func overviewWindows(
+        _ windows: [WindowsUsageWindowPresentation],
+        hidden: Set<String>) -> [WindowsUsageWindowPresentation]
+    {
+        guard !hidden.isEmpty else { return windows }
+        let selected = windows.filter { window in window.key.map { !hidden.contains($0) } ?? true }
+        return selected.isEmpty ? windows : selected
     }
 
     var dashboardText: String {
@@ -819,7 +848,8 @@ struct WindowsDashboardPresentation: Equatable, Sendable {
                         resetsAt: window.resetsAt,
                         description: window.resetText),
                     fallback: "Reset unavailable"),
-                resetsAt: window.resetsAt)
+                resetsAt: window.resetsAt,
+                key: window.key)
         }
         if windows.isEmpty, let usedPercent = Self.normalizedPercent(snapshot.usedPercent) {
             windows = [
@@ -877,7 +907,8 @@ struct WindowsDashboardPresentation: Equatable, Sendable {
             codexResetCredits: visibleCodexResetCredits,
             codexResetCreditsText: visibleCodexResetCredits?.compactText(now: now) ?? "",
             codexResetCreditsAccessibilityText: visibleCodexResetCredits?.accessibilityText(now: now) ?? "",
-            detailSections: snapshot.detailSections)
+            detailSections: snapshot.detailSections,
+            hiddenOverviewWindowKeys: Set(profile.hiddenOverviewWindowKeys))
     }
 
     private static func normalizedPercent(_ value: Double?) -> Double? {
