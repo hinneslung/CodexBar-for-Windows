@@ -70,7 +70,8 @@ enum WindowsProviderDiagnosticDecoder {
                 label: Self.windowLabel(window),
                 usedPercent: min(100, max(0, window.usedPercent)),
                 resetText: Self.resetText(window),
-                resetsAt: window.resetsAt)
+                resetsAt: window.resetsAt,
+                key: Self.overviewKey(window))
         }
         let usageSummary = Self.usageSummary(usage)
         return WindowsProviderDiagnosticDecodeResult(
@@ -192,6 +193,13 @@ enum WindowsProviderDiagnosticDecoder {
                 }
             }
         }
+    }
+
+    /// Diagnostic windows carry only a label. The standard slots are named by it; other windows have no stable
+    /// identity and are always shown in the overview.
+    private static func overviewKey(_ window: RateWindow) -> String? {
+        let label = (try? self.safeText(window.label, required: true))?.lowercased()
+        return ["primary", "secondary", "tertiary"].contains(label ?? "") ? label : nil
     }
 
     private static func windowLabel(_ window: RateWindow) -> String {

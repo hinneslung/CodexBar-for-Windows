@@ -155,6 +155,8 @@ final class WindowsTrayApplication {
     private let instance: HINSTANCE?
     private let dataSource: AnyWindowsProviderDataSource
     private let configurationStore: WindowsConfigurationStore?
+    private let overviewNumberCatalogStore: WindowsOverviewNumberCatalogStore?
+    private var overviewNumberCatalog: WindowsOverviewNumberCatalog
     private let credentialRouteResolver: WindowsProviderCredentialRouteResolver
     private let popup: WindowsPopupWindow
     private let applicationIcon: WindowsApplicationIcon
@@ -196,6 +198,10 @@ final class WindowsTrayApplication {
         self.credentialRouteResolver = credentialRouteResolver
         self.providerConfigurationClient = providerConfigurationClient
         self.configuration = (try? configurationStore?.load()) ?? .defaults
+        self.overviewNumberCatalogStore = configurationStore.map {
+            WindowsOverviewNumberCatalogStore(configurationFileURL: $0.fileURL)
+        }
+        self.overviewNumberCatalog = self.overviewNumberCatalogStore?.load() ?? WindowsOverviewNumberCatalog()
         self.presentation = .loading(profiles: self.configuration.enabledProviders)
         self.popup = WindowsPopupWindow(instance: self.instance)
         self.applicationIcon = WindowsApplicationIcon.load()
@@ -232,6 +238,10 @@ final class WindowsTrayApplication {
         self.scheduleUpdateCheck(afterSeconds: WindowsUpdateCheck.firstCheckDelaySeconds)
         self.popup.update(self.presentation)
         self.popup.updateConfiguration(self.configuration)
+        if self.overviewNumberCatalog.retain(Set(self.configuration.providers.map(\.profileID))) {
+            self.saveOverviewNumberCatalog()
+        }
+        self.popup.updateOverviewNumberCatalog(self.overviewNumberCatalog)
         self.requestRefresh()
         if self.showPopupOnStart {
             self.popup.showAnchored()
@@ -781,6 +791,10 @@ extension WindowsTrayApplication {
     {
         if snapshot.availability == .available {
             self.lastSuccessfulSnapshots[snapshot.profileID] = snapshot
+            if self.overviewNumberCatalog.record(snapshot) {
+                self.saveOverviewNumberCatalog()
+                self.popup.updateOverviewNumberCatalog(self.overviewNumberCatalog)
+            }
             return snapshot
         }
         return Self.snapshotRetainingLastSuccess(
@@ -821,6 +835,16 @@ extension WindowsTrayApplication {
         }
         self.configuration.setProviderEnabled(profileID, enabled: !current.enabled)
         self.saveConfigurationAndRefresh()
+    }
+
+    func toggleOverviewStyle() {
+        let previous = self.configuration.overviewStyle
+        self.configuration.overviewStyle = previous.toggled
+        guard self.saveConfiguration() else {
+            self.configuration.overviewStyle = previous
+            self.popup.updateConfiguration(self.configuration)
+            return
+        }
     }
 
     func toggleUsageBarsShowUsed() {
@@ -968,6 +992,19 @@ extension WindowsTrayApplication {
             return false
         }
         let previous = self.configuration.providers[index]
+        var previousWithNewOverview = previous
+        previousWithNewOverview.hiddenOverviewWindowKeys = provider.hiddenOverviewWindowKeys
+        if previousWithNewOverview == provider {
+            // Only the overview selection changed: save and redraw from the current readings, without a refresh.
+            self.configuration.providers[index] = provider
+            guard self.saveConfiguration() else {
+                self.configuration.providers[index] = previous
+                self.popup.updateConfiguration(self.configuration)
+                return false
+            }
+            self.representCurrentReadings()
+            return true
+        }
         let previousSuccessful = self.lastSuccessfulSnapshots[provider.profileID]
         let previousPublished = self.lastPublishedSnapshots[provider.profileID]
         self.configuration.providers[index] = provider
@@ -994,6 +1031,22 @@ extension WindowsTrayApplication {
             || previous.wslDistro != current.wslDistro
             || previous.companionValues != current.companionValues
             || previous.signInFolder != current.signInFolder
+    }
+
+    /// A cache of number names for the profile page; failing to write it only delays the list until a refresh.
+    private func saveOverviewNumberCatalog() {
+        try? self.overviewNumberCatalogStore?.save(self.overviewNumberCatalog)
+    }
+
+    /// Rebuilds the overview from the readings already shown, for display-only setting changes.
+    private func representCurrentReadings() {
+        self.presentation = WindowsDashboardPresentation.make(
+            snapshots: Array(self.lastPublishedSnapshots.values),
+            refreshedAt: self.presentation.refreshedAt ?? Date(),
+            profiles: self.configuration.enabledProviders,
+            isRefreshing: self.presentation.isRefreshing)
+        self.popup.update(self.presentation)
+        self.updateTrayTooltip()
     }
 
     @discardableResult
