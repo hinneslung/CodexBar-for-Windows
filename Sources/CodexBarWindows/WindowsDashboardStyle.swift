@@ -13,6 +13,8 @@ enum WindowsDashboardPalette {
     static let primaryText = color(230, 226, 219)
     static let secondaryText = color(162, 156, 147)
     static let captionText = color(107, 102, 95)
+    /// Reset times: between caption and secondary text, so they stay quiet but readable.
+    static let resetText = color(140, 134, 126)
     static let disabledText = color(82, 78, 72)
     static let sage = color(126, 143, 110)
     static let sageSurface = color(40, 45, 36)

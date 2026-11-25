@@ -141,6 +141,22 @@ struct WindowsProviderSignInFolderField: Equatable, Sendable {
     }
 }
 
+/// How the overview shows each profile: every selected usage number, or only the lowest of them.
+enum WindowsOverviewStyle: String, Codable, Equatable, Sendable {
+    case detailed
+    case compact
+
+    /// Unknown values from a newer build fall back to the default instead of failing the configuration.
+    init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self)
+        self = Self(rawValue: value) ?? .detailed
+    }
+
+    var toggled: Self {
+        self == .detailed ? .compact : .detailed
+    }
+}
+
 struct WindowsProviderSourceMode: RawRepresentable, Hashable, Codable, Sendable,
     CustomStringConvertible
 {
@@ -183,6 +199,8 @@ struct WindowsProviderConfiguration: Codable, Equatable, Sendable, CustomStringC
     var claudeConfigDirectory: String?
     /// The home folder agy runs with for this profile's Automatic route, so it can use another sign-in.
     var antigravityHome: String?
+    /// Keys of usage numbers left out of the overview. Opt-out, so numbers a provider adds later are shown.
+    var hiddenOverviewWindowKeys: [String]
 
     init(
         id: WindowsProviderID,
@@ -195,7 +213,8 @@ struct WindowsProviderConfiguration: Codable, Equatable, Sendable, CustomStringC
         companionValues: [String: String] = [:],
         codexHome: String? = nil,
         claudeConfigDirectory: String? = nil,
-        antigravityHome: String? = nil)
+        antigravityHome: String? = nil,
+        hiddenOverviewWindowKeys: [String] = [])
     {
         self.id = id
         self.profileID = profileID ?? .defaultID(for: id)
@@ -227,11 +246,18 @@ struct WindowsProviderConfiguration: Codable, Equatable, Sendable, CustomStringC
         } else {
             self.antigravityHome = nil
         }
+        self.hiddenOverviewWindowKeys = Self.normalizedOverviewWindowKeys(hiddenOverviewWindowKeys)
+    }
+
+    /// Sorted, unique, non-empty keys, so equal selections compare equal.
+    static func normalizedOverviewWindowKeys(_ keys: [String]) -> [String] {
+        Array(Set(keys.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })).sorted()
     }
 
     /// The Linux folder holding this profile's own provider sign-in, for providers that support one.
     var signInFolder: String? {
         get {
+            // Provider-specific by design: each provider stores its sign-in folder in its own setting.
             switch self.id {
             case .codex: self.codexHome
             case .claude: self.claudeConfigDirectory
@@ -263,6 +289,7 @@ struct WindowsProviderConfiguration: Codable, Equatable, Sendable, CustomStringC
         case codexHome
         case claudeConfigDirectory
         case antigravityHome
+        case hiddenOverviewWindowKeys
     }
 
     init(from decoder: Decoder) throws {
@@ -323,6 +350,9 @@ struct WindowsProviderConfiguration: Codable, Equatable, Sendable, CustomStringC
         self.antigravityHome = self.id == .antigravity
             ? WindowsProviderProfileValidation.normalizedSignInFolder(decodedAntigravityHome)
             : nil
+        // Optional presentation data: a malformed list shows every number instead of failing the profile.
+        self.hiddenOverviewWindowKeys = Self.normalizedOverviewWindowKeys(
+            (try? container.decodeIfPresent([String].self, forKey: .hiddenOverviewWindowKeys)) ?? [])
     }
 
     var description: String {
@@ -359,6 +389,7 @@ struct WindowsAppConfiguration: Codable, Equatable, Sendable, CustomStringConver
     var runAtStartup: Bool
     /// Checks GitHub for a newer published release. The only network request the Windows app makes itself.
     var checkForUpdates: Bool
+    var overviewStyle: WindowsOverviewStyle
     var providers: [WindowsProviderConfiguration]
 
     init(
@@ -367,6 +398,7 @@ struct WindowsAppConfiguration: Codable, Equatable, Sendable, CustomStringConver
         refreshIntervalMinutes: Int = Self.defaultRefreshIntervalMinutes,
         runAtStartup: Bool = false,
         checkForUpdates: Bool = true,
+        overviewStyle: WindowsOverviewStyle = .detailed,
         providers: [WindowsProviderConfiguration])
     {
         self.schemaVersion = schemaVersion
@@ -374,6 +406,7 @@ struct WindowsAppConfiguration: Codable, Equatable, Sendable, CustomStringConver
         self.refreshIntervalMinutes = Self.normalizedRefreshIntervalMinutes(refreshIntervalMinutes)
         self.runAtStartup = runAtStartup
         self.checkForUpdates = checkForUpdates
+        self.overviewStyle = overviewStyle
         self.providers = providers
     }
 
@@ -383,6 +416,7 @@ struct WindowsAppConfiguration: Codable, Equatable, Sendable, CustomStringConver
         case refreshIntervalMinutes
         case runAtStartup
         case checkForUpdates
+        case overviewStyle
         case providers
     }
 
@@ -396,6 +430,8 @@ struct WindowsAppConfiguration: Codable, Equatable, Sendable, CustomStringConver
                 ?? Self.defaultRefreshIntervalMinutes)
         self.runAtStartup = try container.decodeIfPresent(Bool.self, forKey: .runAtStartup) ?? false
         self.checkForUpdates = try container.decodeIfPresent(Bool.self, forKey: .checkForUpdates) ?? true
+        self.overviewStyle =
+            (try? container.decodeIfPresent(WindowsOverviewStyle.self, forKey: .overviewStyle)) ?? .detailed
         self.providers =
             try container.decodeIfPresent([WindowsProviderConfiguration].self, forKey: .providers) ?? []
         var seenProfiles = Set<WindowsProviderProfileID>()
@@ -466,6 +502,7 @@ struct WindowsAppConfiguration: Codable, Equatable, Sendable, CustomStringConver
         "WindowsAppConfiguration(schemaVersion: \(self.schemaVersion), usageBarsShowUsed: "
             + "\(self.usageBarsShowUsed), refreshIntervalMinutes: \(self.refreshIntervalMinutes), "
             + "runAtStartup: \(self.runAtStartup), checkForUpdates: \(self.checkForUpdates), "
+            + "overviewStyle: \(self.overviewStyle.rawValue), "
             + "providers: \(self.providers.count))"
     }
 
