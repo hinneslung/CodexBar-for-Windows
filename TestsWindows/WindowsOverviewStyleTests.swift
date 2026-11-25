@@ -16,9 +16,9 @@ struct WindowsOverviewStyleTests {
             availability: .available,
             sourceText: "Automatic",
             windows: [
-                Self.window("Session", used: 51, key: "primary"),
-                Self.window("Weekly", used: 26, key: "secondary"),
-                Self.window("Sonnet weekly", used: 59, key: "extra:sonnet"),
+                self.window("Session", used: 51, key: "primary"),
+                self.window("Weekly", used: 26, key: "secondary"),
+                self.window("Sonnet weekly", used: 59, key: "extra:sonnet"),
             ])
     }
 
@@ -73,7 +73,7 @@ struct WindowsOverviewStyleTests {
     }
 
     @Test
-    func `each profile keeps its own selection and the tooltip follows it`() throws {
+    func `each profile keeps its own selection and the tooltip follows it`() {
         let personalID = WindowsProviderProfileID(rawValue: "claude-personal")
         let work = WindowsProviderConfiguration(id: .claude, enabled: true, order: 0)
         let personal = WindowsProviderConfiguration(
